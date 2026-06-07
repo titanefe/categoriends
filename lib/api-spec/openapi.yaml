@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Categoriends game API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: game
+    description: Game operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /game/generate-subcategory:
+    post:
+      operationId: generateSubcategory
+      tags: [game]
+      summary: Generate a sub-category from a main category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateSubcategoryInput"
+      responses:
+        "200":
+          description: Generated sub-category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateSubcategoryResult"
+
+  /game/verify-answer:
+    post:
+      operationId: verifyAnswer
+      tags: [game]
+      summary: Verify a player's answer against the sub-category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyAnswerInput"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyAnswerResult"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +75,62 @@ components:
       required:
         - status
 
+    GenerateSubcategoryInput:
+      type: object
+      required:
+        - category
+        - language
+      properties:
+        category:
+          type: string
+          description: The main category selected by the player
+        language:
+          type: string
+          enum: [en, tr]
+          description: Language for the sub-category (en or tr)
+
+    GenerateSubcategoryResult:
+      type: object
+      required:
+        - subcategory
+      properties:
+        subcategory:
+          type: string
+          description: The generated specific sub-category
+
+    VerifyAnswerInput:
+      type: object
+      required:
+        - answer
+        - subcategory
+        - previousAnswers
+        - language
+      properties:
+        answer:
+          type: string
+          description: The answer submitted by the player
+        subcategory:
+          type: string
+          description: The current sub-category
+        previousAnswers:
+          type: array
+          items:
+            type: string
+          description: List of previously accepted answers in this round
+        language:
+          type: string
+          enum: [en, tr]
+          description: Language for verification (en or tr)
+
+    VerifyAnswerResult:
+      type: object
+      required:
+        - valid
+        - reason
+      properties:
+        valid:
+          type: boolean
+          description: Whether the answer is valid
+        reason:
+          type: string
+          description: Brief explanation of why the answer was accepted or rejected
