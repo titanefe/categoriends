@@ -60,13 +60,17 @@ router.post("/game/verify-answer", async (req, res): Promise<void> => {
     language === "tr"
       ? `Sen bir oyun hakemisin. Oyuncunun cevabını değerlendir:
 1. Cevap alt kategoriye uygun mu?
-2. Daha önce kullanılmış mı?
+2. Daha önce kullanılmış mı? (yazım hatası olan ama aynı kelimeyi kasteden cevaplar da sayılır)
+
+ÖNEMLİ: Küçük yazım hataları, yanlış büyük/küçük harf veya hafif imla yanlışları olsa bile, kastedilenin ne olduğu açıksa cevabı GEÇERLI say. Örneğin "Barcelena" → "Barcelona" geçerlidir.
 
 Yanıtını MUTLAKA şu JSON formatında ver: {"valid": true/false, "reason": "kısa açıklama"}
 Açıklama 1 cümle olmalı. Başka hiçbir şey yazma.`
       : `You are a game judge. Evaluate if the player's answer:
 1. Fits the sub-category
-2. Has NOT already been used
+2. Has NOT already been used (including typo variants of the same word)
+
+IMPORTANT: Be lenient with minor spelling mistakes, typos, or slight misspellings — if you can clearly understand what word or answer the player intended, mark it as VALID. For example "Barcelena" → "Barcelona" is valid. Only reject if the answer genuinely doesn't fit the sub-category or is clearly a duplicate.
 
 Respond ONLY in this JSON format: {"valid": true/false, "reason": "brief explanation"}
 The reason should be 1 sentence. Write nothing else.`;
