@@ -1,0 +1,38 @@
+You are an expert full-stack web developer. Your task is to build a modern, real-time web-based multiplayer game called "Categoriends". 
+
+Below are the comprehensive requirements for the game logic, AI integration, multiplayer systems, and UI/UX. Please provide the project structure, recommended tech stack, and the necessary code to build this application.
+
+# 1. Core Gameplay Loop
+- The game starts with a category selection phase. Players choose from 10 Main Categories (e.g., Games, Sports, Film/TV, General Knowledge). 
+- Alternatively, players have the option to type in a Custom Category.
+- Once a main category is selected, the game uses an AI API to generate a random, highly specific Sub-Category (e.g., if "Games" is selected, the AI might generate "Game of the Year Winners" or "2-Player Couch Co-op Games").
+- Players take turns typing items that fit this specific sub-category.
+- Each player has exactly 10 seconds to submit a valid answer.
+- AI Verification System: Every submitted answer is instantly checked by an AI. 
+  - The AI must evaluate two things: 1) Does it fit the sub-category? 2) Has it already been played in this round?
+  - If the answer is valid, the turn immediately passes to the next player.
+  - If the answer is invalid (wrong or repeated), it is rejected. **Crucially, the 10-second timer does NOT reset.** The player must quickly type a new answer before their time runs out.
+
+# 2. Game Modes
+The game features three distinct modes:
+1. Solo (Training Mode): A single-player mode where the player tries to get the highest score possible by chaining valid answers before the 10-second timer runs out.
+2. 1v1 Duel: A 2-player mode. Players pass the turn back and forth. The first person who fails to submit a valid answer within their 10-second window loses.
+3. Multiplayer Party (2+ players): A battle-royale style elimination mode. Players take turns in a specific order. If a player fails to answer within 10 seconds, they are eliminated. The game continues skipping the eliminated player until only one person is left standing.
+
+# 3. Multiplayer & Room System
+- The game relies on a real-time WebSocket connection (e.g., Socket.io or WebSockets) for instant turn-passing and timer syncing.
+- One player acts as the host, creates a private room, and receives a unique short "Room Code" (e.g., 4-6 alphanumeric characters).
+- Other players join the lobby by entering this Room Code.
+
+# 4. Localization
+- The game must fully support two languages: English and Turkish.
+- The game title "Categoriends" remains exactly the same in both languages.
+- The AI prompts for sub-category generation and answer verification must respect the lobby's selected language.
+
+# 5. UI/UX Requirements
+- The UI must be minimalistic, modern, and clean. Avoid clutter.
+- Use a sleek typography-driven design with smooth CSS transitions for the timer (e.g., a progress bar that depletes over 10 seconds, turning red as it nears zero).
+- Use distinct, satisfying visual feedback for "Answer Accepted" (e.g., a green flash/check) and "Answer Rejected" (e.g., a slight screen shake, red text).
+- Mobile-responsive: The game will primarily be played on phones at parties, so the keyboard must not obstruct the timer or the input field.
+
+Please outline the database schema, the WebSocket event structure, the AI prompt logic for verification, and start by generating the foundational frontend and backend code.
