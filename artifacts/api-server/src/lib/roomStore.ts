@@ -17,6 +17,7 @@ export interface Room {
   acceptedAnswers: string[];
   currentPlayerId: string | null;
   turnOrder: string[];
+  timeSeconds: number;
   createdAt: number;
 }
 
@@ -35,7 +36,8 @@ export function createRoom(
   hostId: string,
   mode: Room["mode"],
   language: Room["language"],
-  category: string
+  category: string,
+  timeSeconds: number = 15
 ): Room {
   let code = generateCode();
   while (rooms.has(code)) {
@@ -53,6 +55,7 @@ export function createRoom(
     acceptedAnswers: [],
     currentPlayerId: null,
     turnOrder: [],
+    timeSeconds,
     createdAt: Date.now(),
   };
   rooms.set(code, room);

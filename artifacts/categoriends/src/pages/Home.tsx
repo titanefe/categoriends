@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
@@ -86,7 +85,7 @@ export default function Home() {
 
         {/* Footer */}
         <p className="text-muted-foreground/40 text-xs font-mono mt-4">
-          v1.0 &mdash; realtme word battles
+          v1.0 &mdash; real-time word battles
         </p>
       </div>
     </div>

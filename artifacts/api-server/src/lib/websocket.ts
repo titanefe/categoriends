@@ -19,7 +19,7 @@ interface ExtWebSocket extends WebSocket {
 }
 
 type WSMessage =
-  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string }
+  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number }
   | { type: "join"; roomCode: string; playerId: string; playerName: string }
   | { type: "start_game"; roomCode: string; subcategory: string }
   | { type: "answer_submitted"; roomCode: string; playerId: string; answer: string; valid: boolean; reason: string }
@@ -67,7 +67,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
       switch (msg.type) {
         case "create_room": {
-          const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category);
+          const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category, msg.timeSeconds ?? 15);
           const player: Player = {
             id: msg.hostId,
             name: msg.playerName,

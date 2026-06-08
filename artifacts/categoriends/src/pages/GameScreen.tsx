@@ -12,34 +12,41 @@ export default function GameScreen() {
   const [, setLocation] = useLocation();
   const verifyMutation = useVerifyAnswer();
 
+  const timerMax = room?.timeSeconds ?? 15;
+
   const [answer, setAnswer] = useState("");
-  const [timeLeft, setTimeLeft] = useState(10);
+  const [timeLeft, setTimeLeft] = useState(timerMax);
   const [animState, setAnimState] = useState<AnimState>("idle");
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifying, setVerifying] = useState(false);
-  const [scores, setScores] = useState<{ id: string; name: string; score: number }[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeLeftRef = useRef(10);
-  const isMyTurn = gameState?.currentPlayerId === player?.id;
+  const timerPausedRef = useRef(false);
+  const timeLeftRef = useRef(timerMax);
   const isSolo = room?.mode === "solo";
+  const isMyTurn = gameState?.currentPlayerId === player?.id;
 
-  // Sync timeLeft ref
+  // Keep timeLeftRef in sync
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
 
-  // Start/reset timer when turn changes
+  // Start/reset timer when turn or round changes
   useEffect(() => {
     if (!gameState) return;
-    setTimeLeft(10);
+
+    const max = room?.timeSeconds ?? 15;
+    setTimeLeft(max);
+    timeLeftRef.current = max;
     setAnswer("");
     setAnimState("idle");
     setRejectionReason("");
     setVerifying(false);
+    timerPausedRef.current = false;
 
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
+      if (timerPausedRef.current) return;
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
@@ -50,15 +57,14 @@ export default function GameScreen() {
       });
     }, 1000);
 
-    // Focus input on my turn
     if (gameState.currentPlayerId === player?.id) {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
 
-    return () => { if (timerRef.current) clearInterval(timerRef.current!); };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [gameState?.currentPlayerId, gameState?.round]);
 
-  // WebSocket messages
+  // WebSocket messages (multiplayer)
   useEffect(() => {
     if (!ws || isSolo) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -70,7 +76,7 @@ export default function GameScreen() {
             subcategory: gameState?.subcategory ?? "",
             currentPlayerId: data.nextPlayerId,
             acceptedAnswers: data.room.acceptedAnswers ?? gameState?.acceptedAnswers ?? [],
-            timeLeft: 10,
+            timeLeft: timerMax,
             round: (gameState?.round ?? 1) + 1,
           });
         }
@@ -78,10 +84,10 @@ export default function GameScreen() {
           setRoom(data.room);
         }
         if (data.type === "game_over") {
-          setScores(data.scores ?? []);
           setTimeout(() => setLocation("/result"), 800);
         }
         if (data.type === "answer_result") {
+          timerPausedRef.current = false;
           if (data.valid) {
             triggerAccepted();
           } else {
@@ -92,18 +98,24 @@ export default function GameScreen() {
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, isSolo, gameState, setRoom, setGameState, setLocation]);
+  }, [ws, isSolo, gameState, setRoom, setGameState, setLocation, timerMax]);
 
   function triggerAccepted() {
     setAnimState("accepted");
-    setTimeout(() => setAnimState("idle"), 700);
+    setTimeout(() => { setAnimState("idle"); inputRef.current?.focus(); }, 600);
   }
 
   function triggerRejected(reason: string) {
     setRejectionReason(reason);
     setAnimState("rejected");
     setVerifying(false);
-    setTimeout(() => { setAnimState("idle"); setRejectionReason(""); }, 1200);
+    timerPausedRef.current = false;
+    // Auto-focus keyboard again after shake animation
+    setTimeout(() => {
+      setAnimState("idle");
+      setRejectionReason("");
+      inputRef.current?.focus();
+    }, 800);
   }
 
   const handleTimeOut = useCallback(() => {
@@ -112,7 +124,7 @@ export default function GameScreen() {
       setLocation("/result");
       return;
     }
-    if (timeLeftRef.current > 0) return; // guard against stale closures
+    if (timeLeftRef.current > 0) return;
     if (isMyTurn && ws) {
       ws.send(JSON.stringify({
         type: "player_eliminated",
@@ -122,11 +134,13 @@ export default function GameScreen() {
     }
   }, [player, room, isSolo, isMyTurn, ws, setLocation]);
 
-  async function handleSubmit(e?: React.FormEvent) {
+  function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const trimmed = answer.trim();
     if (!trimmed || verifying || !isMyTurn) return;
 
+    // Pause timer during AI processing (especially important in last few seconds)
+    timerPausedRef.current = true;
     setVerifying(true);
     const previousAnswers = gameState?.acceptedAnswers ?? [];
 
@@ -146,16 +160,17 @@ export default function GameScreen() {
             triggerAccepted();
             setAnswer("");
             if (isSolo) {
-              // Solo: advance locally
               if (timerRef.current) clearInterval(timerRef.current);
+              timerPausedRef.current = false;
               setGameState({
                 subcategory: gameState!.subcategory,
                 currentPlayerId: player!.id,
                 acceptedAnswers: [...previousAnswers, trimmed],
-                timeLeft: 10,
+                timeLeft: timerMax,
                 round: (gameState?.round ?? 1) + 1,
               });
             } else if (ws && room) {
+              timerPausedRef.current = false;
               ws.send(JSON.stringify({
                 type: "answer_submitted",
                 roomCode: room.code,
@@ -172,7 +187,9 @@ export default function GameScreen() {
         },
         onError: () => {
           setVerifying(false);
+          timerPausedRef.current = false;
           triggerRejected("Could not verify answer.");
+          setAnswer("");
         },
       }
     );
@@ -186,15 +203,19 @@ export default function GameScreen() {
     );
   }
 
-  const timerPercent = (timeLeft / 10) * 100;
-  const timerColor = timeLeft > 5 ? "hsl(145, 80%, 50%)" : timeLeft > 2 ? "hsl(45, 100%, 60%)" : "hsl(0, 85%, 60%)";
-  const isDangerous = timeLeft <= 3;
+  const timerPercent = (timeLeft / timerMax) * 100;
+  const timerColor = timeLeft > timerMax * 0.5
+    ? "hsl(145, 80%, 50%)"
+    : timeLeft > timerMax * 0.2
+    ? "hsl(45, 100%, 60%)"
+    : "hsl(0, 85%, 60%)";
+  const isDangerous = timeLeft <= Math.ceil(timerMax * 0.2);
 
   const currentPlayer = room?.players?.find((p) => p.id === gameState.currentPlayerId);
   const myTurn = gameState.currentPlayerId === player?.id;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col select-none" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    <div className="min-h-screen bg-background flex flex-col select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
@@ -221,24 +242,28 @@ export default function GameScreen() {
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
             data-testid="timer-bar"
-            className={`h-full rounded-full timer-bar ${isDangerous ? "animate-pulse-danger" : ""}`}
-            style={{ width: `${timerPercent}%`, backgroundColor: timerColor }}
+            className={`h-full rounded-full timer-bar ${isDangerous && !timerPausedRef.current ? "animate-pulse-danger" : ""}`}
+            style={{ width: `${timerPercent}%`, backgroundColor: verifying ? "hsl(45, 100%, 60%)" : timerColor }}
           />
         </div>
         <div className="flex justify-between mt-1">
           <span className="text-xs text-muted-foreground font-mono">
-            {myTurn ? (isDangerous ? "HURRY!" : t("game.yourTurn")) : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
+            {verifying
+              ? "Checking..."
+              : myTurn
+              ? (isDangerous ? "HURRY!" : t("game.yourTurn"))
+              : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
           </span>
           <span
             data-testid="text-timer"
-            className={`text-xs font-mono font-bold ${isDangerous ? "text-destructive animate-countdown-tick" : "text-muted-foreground"}`}
+            className={`text-xs font-mono font-bold ${isDangerous && !verifying ? "text-destructive animate-countdown-tick" : "text-muted-foreground"}`}
           >
-            {timeLeft}s
+            {verifying ? "⏸" : `${timeLeft}s`}
           </span>
         </div>
       </div>
 
-      {/* Players row */}
+      {/* Players row (multiplayer) */}
       {!isSolo && room?.players && (
         <div className="px-4 mb-3 flex gap-2 overflow-x-auto pb-1">
           {room.players.map((p) => (
@@ -257,7 +282,7 @@ export default function GameScreen() {
                 p.eliminated ? "bg-destructive/40" : gameState.currentPlayerId === p.id ? "bg-primary" : "bg-muted-foreground/40"
               }`} />
               {p.name}
-              {p.eliminated && <span className="ml-1 text-xs">{t("game.eliminated")}</span>}
+              {p.eliminated && <span className="ml-1">{t("game.eliminated")}</span>}
             </div>
           ))}
         </div>
@@ -294,7 +319,7 @@ export default function GameScreen() {
       )}
 
       {/* Input area */}
-      <div className="px-4 pb-4 pt-2" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}>
+      <div className="px-4 pt-2" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}>
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className={`flex-1 relative rounded-xl overflow-hidden transition-all ${
             animState === "accepted" ? "animate-flash-green" : animState === "rejected" ? "animate-flash-red animate-shake" : ""

@@ -5,12 +5,15 @@ import { useGame } from "@/context/GameContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 import { useGenerateSubcategory } from "@workspace/api-client-react";
 
+const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
+
 export default function SoloSetup() {
   const { t, lang } = useTranslation();
   const { setRoom, setPlayer, setGameState } = useGame();
   const [, setLocation] = useLocation();
   const [selected, setSelected] = useState<string | null>(null);
   const [custom, setCustom] = useState("");
+  const [timeSeconds, setTimeSeconds] = useState(15);
   const [error, setError] = useState("");
 
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
@@ -42,12 +45,13 @@ export default function SoloSetup() {
             subcategory: result.subcategory,
             category,
             language: lang,
+            timeSeconds,
           });
           setGameState({
             subcategory: result.subcategory,
             currentPlayerId: playerId,
             acceptedAnswers: [],
-            timeLeft: 10,
+            timeLeft: timeSeconds,
             round: 1,
           });
           setLocation("/game");
@@ -90,7 +94,7 @@ export default function SoloSetup() {
           ))}
         </div>
 
-        <div className="mb-6">
+        <div className="mb-5">
           <p className="text-xs text-muted-foreground mb-2 font-mono">{t("setup.customCategory")}</p>
           <input
             data-testid="input-custom-category"
@@ -100,6 +104,28 @@ export default function SoloSetup() {
             placeholder={t("setup.customCategoryPlaceholder")}
             className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           />
+        </div>
+
+        {/* Time per turn */}
+        <div className="mb-6">
+          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
+            Time per turn
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {TIME_OPTIONS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTimeSeconds(t)}
+                className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
+                  timeSeconds === t
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-border text-muted-foreground hover:border-accent/50"
+                }`}
+              >
+                {t}s
+              </button>
+            ))}
+          </div>
         </div>
 
         {error && (

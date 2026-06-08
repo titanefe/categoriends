@@ -11,14 +11,14 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/", "/ws" ]
+paths = ["/"]
 localPort = 24733
 
 [services.development]
 run = "pnpm --filter @workspace/categoriends run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/categoriends", "run", "build" ]
+build = ["pnpm", "--filter", "@workspace/categoriends", "run", "build"]
 publicDir = "artifacts/categoriends/dist/public"
 serve = "static"
 

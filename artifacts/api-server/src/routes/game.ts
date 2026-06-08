@@ -16,22 +16,69 @@ router.post("/game/generate-subcategory", async (req, res): Promise<void> => {
 
   const systemPrompt =
     language === "tr"
-      ? `Sen bir oyun asistanısın. Verilen ana kategoriye uygun, çok özgün ve spesifik bir alt kategori üret. 
-         Alt kategori kısa (3-6 kelime) ve net olmalı. Sadece alt kategoriyi yaz, başka hiçbir şey yazma.
-         Örnek: "Games" → "2010'ların Ödüllü Video Oyunları"`
-      : `You are a game assistant. Generate a highly specific, creative sub-category for the given main category.
-         The sub-category should be short (3-6 words) and precise. Output only the sub-category, nothing else.
-         Example: "Games" → "Award-Winning Games from the 2010s"`;
+      ? `Sen bir kelime oyunu asistanısın. Verilen kategoriye uygun, GENIŞ ve eğlenceli bir alt kategori üret.
+
+KURALLAR:
+- Alt kategori kısa (2-4 kelime) ve basit olmalı
+- Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı
+- Çok özgün veya spesifik OLMA
+- Sadece alt kategoriyi yaz, başka hiçbir şey yazma
+
+İYİ ÖRNEKLER:
+"Yiyecek & İçecek" → "Fast Food Zincirleri"
+"Yiyecek & İçecek" → "Dondurma Markaları"  
+"Yiyecek & İçecek" → "Gazlı İçecekler"
+"Spor" → "Olimpik Sporlar"
+"Spor" → "Futbol Dünya Kupası Ülkeleri"
+"Müzik" → "90'lar Pop Sanatçıları"
+"Müzik" → "İngiliz Rock Grupları"
+"Film & Dizi" → "Marvel Filmleri"
+"Film & Dizi" → "Disney Animasyon Filmleri"
+"Hayvanlar" → "Safari Hayvanları"
+"Hayvanlar" → "Popüler Köpek Irkları"
+"Coğrafya" → "Avrupa Başkentleri"
+"Tarih" → "Ünlü Savaşlar"
+
+KÖTÜ ÖRNEKLER (çok spesifik):
+"2010'ların Ödüllü Bağımsız Avrupa Filmleri" ❌
+"1800'lerden Masa Oyunları" ❌`
+      : `You are a word game assistant. Generate a BROAD, fun sub-category for the given category.
+
+RULES:
+- Keep it short (2-4 words) and simple
+- Must be broad enough that players can easily name 5-10 examples
+- Do NOT be overly specific or creative — keep it well-known
+- Output only the sub-category name, nothing else
+
+GOOD EXAMPLES:
+"Food & Drink" → "Fast Food Chains"
+"Food & Drink" → "Ice Cream Brands"
+"Food & Drink" → "Popular Snack Brands"
+"Sports" → "Olympic Sports"
+"Sports" → "Soccer World Cup Countries"
+"Music" → "90s Pop Artists"
+"Music" → "Rock Bands from the UK"
+"Film & TV" → "Marvel Superhero Movies"
+"Film & TV" → "Disney Animated Films"
+"Animals" → "African Safari Animals"
+"Animals" → "Popular Dog Breeds"
+"Geography" → "European Capital Cities"
+"History" → "Famous Wars"
+"Science" → "Planets in the Solar System"
+
+BAD EXAMPLES (too specific):
+"Award-Winning Independent European Films from the 2010s" ❌
+"Board Games from the 1800s" ❌`;
 
   const userPrompt =
     language === "tr"
-      ? `Ana kategori: "${category}". Spesifik bir alt kategori üret.`
-      : `Main category: "${category}". Generate a specific sub-category.`;
+      ? `Kategori: "${category}". Geniş ve basit bir alt kategori üret.`
+      : `Category: "${category}". Generate a broad, simple sub-category.`;
 
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 60,
+      max_tokens: 30,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -58,22 +105,26 @@ router.post("/game/verify-answer", async (req, res): Promise<void> => {
 
   const systemPrompt =
     language === "tr"
-      ? `Sen bir oyun hakemisin. Oyuncunun cevabını değerlendir:
-1. Cevap alt kategoriye uygun mu?
-2. Daha önce kullanılmış mı? (yazım hatası olan ama aynı kelimeyi kasteden cevaplar da sayılır)
+      ? `Sen bir kelime oyunu hakemisin. İki şeyi değerlendir:
+1. Oyuncunun cevabı bu alt kategoriye uygun mu?
+2. Bu cevap (veya çok benzer bir versiyonu) daha önce kullanılmış mı?
 
-ÖNEMLİ: Küçük yazım hataları, yanlış büyük/küçük harf veya hafif imla yanlışları olsa bile, kastedilenin ne olduğu açıksa cevabı GEÇERLI say. Örneğin "Barcelena" → "Barcelona" geçerlidir.
+YAZIM HATASI KURALI: Küçük yazım hataları veya imla yanlışları olsa bile, kastedilenin ne olduğu açıkça anlaşılıyorsa cevabı GEÇERLİ say. Örnek: "Macdonalds" → McDonald's GEÇERLİ.
 
-Yanıtını MUTLAKA şu JSON formatında ver: {"valid": true/false, "reason": "kısa açıklama"}
-Açıklama 1 cümle olmalı. Başka hiçbir şey yazma.`
-      : `You are a game judge. Evaluate if the player's answer:
-1. Fits the sub-category
-2. Has NOT already been used (including typo variants of the same word)
+TEKRAR KURALI (ÖNEMLİ): Eğer cevap, daha önce kabul edilmiş bir cevapla aynı şeyi ifade ediyorsa (yazım farkı olsa bile) GEÇERSIZ say. Örnek: önceki cevap "Paris" ise "Pars" veya "paris" da GEÇERSIZ.
 
-IMPORTANT: Be lenient with minor spelling mistakes, typos, or slight misspellings — if you can clearly understand what word or answer the player intended, mark it as VALID. For example "Barcelena" → "Barcelona" is valid. Only reject if the answer genuinely doesn't fit the sub-category or is clearly a duplicate.
+Yanıtını SADECE şu JSON formatında ver: {"valid": true/false, "reason": "tek cümle açıklama"}
+Başka hiçbir şey yazma.`
+      : `You are a word game judge. Evaluate two things:
+1. Does the player's answer fit this sub-category?
+2. Has this answer (or a very similar version) already been used?
 
-Respond ONLY in this JSON format: {"valid": true/false, "reason": "brief explanation"}
-The reason should be 1 sentence. Write nothing else.`;
+TYPO RULE: Accept answers with minor spelling mistakes or typos if the intended word is clearly understood. Example: "Macdonalds" → McDonald's is VALID.
+
+DUPLICATE RULE (IMPORTANT): If the answer refers to the same thing as a previously accepted answer — even with different spelling — mark it INVALID. Example: if "Paris" was already accepted, then "Parris" or "paris" is also INVALID. Compare meaning, not just exact spelling.
+
+Respond ONLY in this JSON format: {"valid": true/false, "reason": "one sentence explanation"}
+Write nothing else.`;
 
   const userPrompt =
     language === "tr"
@@ -87,7 +138,7 @@ Player's answer: "${answer}"`;
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 100,
+      max_tokens: 80,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useRef, ReactNode } from "react";
 import { Language } from "../i18n/translations";
 
 export type GameMode = "solo" | "duel" | "party";
@@ -19,6 +19,7 @@ export interface Room {
   subcategory: string;
   category: string;
   language: Language;
+  timeSeconds: number;
 }
 
 export interface GameState {
@@ -42,7 +43,7 @@ interface GameContextType {
   gameState: GameState | null;
   setGameState: (gs: GameState | null) => void;
   ws: WebSocket | null;
-  connectWs: () => void;
+  connectWs: () => WebSocket;
   disconnectWs: () => void;
 }
 
@@ -52,50 +53,40 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [player, setPlayer] = useState<Player | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const connectWs = () => {
-    if (wsRef.current) return;
+  const connectWs = (): WebSocket => {
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      return wsRef.current;
+    }
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     const ws = new WebSocket(wsUrl);
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("WS message:", data);
-        if (data.type === "room_state" && data.room) {
-          setRoom(data.room);
-        }
-        if (data.type === "game_started") {
-          setGameState({
-            subcategory: data.subcategory,
-            currentPlayerId: data.firstPlayerId,
-            acceptedAnswers: [],
-            timeLeft: 10,
-            round: 1
-          });
-        }
-        if (data.type === "turn_passed") {
-          setGameState(prev => prev ? { ...prev, currentPlayerId: data.nextPlayerId, timeLeft: data.timeLeft } : null);
-        }
-        if (data.type === "answer_result") {
-          if (data.valid) {
-            setGameState(prev => prev ? { ...prev, acceptedAnswers: [...prev.acceptedAnswers, data.answer] } : null);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to parse ws message", e);
-      }
+    ws.onopen = () => {
+      setWsInstance(ws);
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+      setWsInstance(null);
+    };
+
+    ws.onerror = () => {
+      wsRef.current = null;
+      setWsInstance(null);
     };
 
     wsRef.current = ws;
+    return ws;
   };
 
   const disconnectWs = () => {
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
+      setWsInstance(null);
     }
   };
 
@@ -104,8 +95,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       player, setPlayer,
       room, setRoom,
       gameState, setGameState,
-      ws: wsRef.current,
-      connectWs, disconnectWs
+      ws: wsInstance,
+      connectWs, disconnectWs,
     }}>
       {children}
     </GameContext.Provider>

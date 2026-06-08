@@ -1,27 +1,29 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type GameMode, type Room, type Player } from "@/context/GameContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 import { useGenerateSubcategory } from "@workspace/api-client-react";
 
+const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
+
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
-  const { setRoom, setPlayer, player, room, connectWs, ws } = useGame();
+  const { setRoom, setPlayer, room, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<GameMode>("duel");
   const [selected, setSelected] = useState<string | null>(null);
   const [custom, setCustom] = useState("");
   const [name, setName] = useState("");
+  const [timeSeconds, setTimeSeconds] = useState(15);
   const [step, setStep] = useState<"setup" | "lobby">("setup");
   const [error, setError] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
-  const wsReadyRef = useRef(false);
 
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
   const generateMutation = useGenerateSubcategory();
 
-  // Listen for room_created message
+  // Listen for room messages on ws
   useEffect(() => {
     if (!ws) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -44,7 +46,7 @@ export default function CreateRoom() {
     return () => ws.removeEventListener("message", handleMsg);
   }, [ws, setRoom, setLocation]);
 
-  async function handleCreate() {
+  function handleCreate() {
     const category = custom.trim() || selected;
     if (!category) { setError("Please select a category."); return; }
     if (!name.trim()) { setError("Please enter your name."); return; }
@@ -53,32 +55,35 @@ export default function CreateRoom() {
     const playerId = `host-${Date.now()}`;
     const p: Player = { id: playerId, name: name.trim(), score: 0, eliminated: false };
     setPlayer(p);
-    connectWs();
 
-    // Wait for WS to open then send create
+    // connectWs returns the socket immediately — use it directly
+    const socket = connectWs();
+
     const tryCreate = () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
           type: "create_room",
           hostId: playerId,
           playerName: name.trim(),
           mode,
           language: lang,
           category,
+          timeSeconds,
         }));
+      } else if (socket.readyState === WebSocket.CONNECTING) {
+        setTimeout(tryCreate, 100);
       } else {
-        setTimeout(tryCreate, 150);
+        setError("Connection failed. Please try again.");
       }
     };
-    setTimeout(tryCreate, 200);
+    tryCreate();
   }
 
-  async function handleStartGame() {
+  function handleStartGame() {
     if (!room || !ws) return;
-    const category = room.category;
 
     generateMutation.mutate(
-      { data: { category, language: lang } },
+      { data: { category: room.category, language: lang } },
       {
         onSuccess: (result) => {
           ws.send(JSON.stringify({
@@ -87,6 +92,7 @@ export default function CreateRoom() {
             subcategory: result.subcategory,
           }));
         },
+        onError: () => setError("Failed to generate sub-category. Try again."),
       }
     );
   }
@@ -98,50 +104,43 @@ export default function CreateRoom() {
           <h2 className="text-2xl font-bold mb-1">{t("lobby.waiting")}</h2>
           <p className="text-muted-foreground text-sm mb-6">
             {mode === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}
+            {" — "}{timeSeconds}s per turn
           </p>
 
-          {/* Room Code */}
           <div className="bg-card border border-primary/30 rounded-xl p-5 mb-6 text-center">
             <p className="text-xs text-muted-foreground font-mono mb-2 tracking-widest uppercase">{t("lobby.code")}</p>
-            <p
-              data-testid="text-room-code"
-              className="text-4xl font-mono font-bold text-primary neon-text tracking-widest"
-            >
+            <p data-testid="text-room-code" className="text-4xl font-mono font-bold text-primary neon-text tracking-widest">
               {generatedCode}
             </p>
           </div>
 
-          {/* Players list */}
           <div className="mb-6">
             <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">{t("lobby.players")}</p>
             <div className="flex flex-col gap-2">
               {(room?.players ?? []).map((p) => (
-                <div
-                  key={p.id}
-                  data-testid={`row-player-${p.id}`}
-                  className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-card border border-border"
-                >
+                <div key={p.id} className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-card border border-border">
                   <div className="w-2 h-2 rounded-full bg-accent" />
                   <span className="text-sm font-medium text-foreground">{p.name}</span>
-                  {p.id === room?.hostId && (
-                    <span className="ml-auto text-xs text-primary font-mono">host</span>
-                  )}
+                  {p.id === room?.hostId && <span className="ml-auto text-xs text-primary font-mono">host</span>}
                 </div>
               ))}
             </div>
           </div>
 
-          {generateMutation.isPending && (
-            <p className="text-center text-muted-foreground text-sm mb-4 font-mono">Generating sub-category...</p>
-          )}
+          {error && <p className="text-destructive text-sm mb-4">{error}</p>}
 
           <button
             data-testid="button-start-game"
             onClick={handleStartGame}
             disabled={generateMutation.isPending || (room?.players.length ?? 0) < 1}
-            className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
           >
-            {t("lobby.start")}
+            {generateMutation.isPending ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Generating...
+              </span>
+            ) : t("lobby.start")}
           </button>
         </div>
       </div>
@@ -149,8 +148,8 @@ export default function CreateRoom() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
+      <div className="w-full max-w-sm py-4">
         <button
           data-testid="button-back"
           onClick={() => setLocation("/")}
@@ -189,6 +188,26 @@ export default function CreateRoom() {
                 }`}
               >
                 {m === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Time per turn */}
+        <div className="mb-5">
+          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">Time per turn</p>
+          <div className="flex gap-2 flex-wrap">
+            {TIME_OPTIONS.map((sec) => (
+              <button
+                key={sec}
+                onClick={() => setTimeSeconds(sec)}
+                className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
+                  timeSeconds === sec
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-border text-muted-foreground hover:border-accent/50"
+                }`}
+              >
+                {sec}s
               </button>
             ))}
           </div>
