@@ -98,11 +98,17 @@ export default function RoomLobby() {
           </div>
         </div>
 
+        {isHost && room.players.length < 2 && (
+          <p className="text-muted-foreground text-xs text-center font-mono mb-4">
+            Waiting for at least 1 more player to join...
+          </p>
+        )}
+
         {isHost ? (
           <button
             data-testid="button-start-game"
             onClick={handleStart}
-            disabled={generateMutation.isPending || room.players.length < 1}
+            disabled={generateMutation.isPending || room.players.length < 2}
             className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
           >
             {generateMutation.isPending ? (
