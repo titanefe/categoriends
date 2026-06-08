@@ -5,6 +5,7 @@ import { useGame } from "@/context/GameContext";
 import { useVerifyAnswer } from "@workspace/api-client-react";
 
 type AnimState = "idle" | "accepted" | "rejected";
+type GameOverOverlay = { winnerName: string } | null;
 
 export default function GameScreen() {
   const { t, lang } = useTranslation();
@@ -19,16 +20,20 @@ export default function GameScreen() {
   const [animState, setAnimState] = useState<AnimState>("idle");
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [gameOverOverlay, setGameOverOverlay] = useState<GameOverOverlay>(null);
+  const eliminatedSentRef = useRef(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerPausedRef = useRef(false);
   const timeLeftRef = useRef(timerMax);
+  const isMyTurnRef = useRef(false);
   const isSolo = room?.mode === "solo";
   const isMyTurn = gameState?.currentPlayerId === player?.id;
 
-  // Keep timeLeftRef in sync
+  // Keep refs in sync
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
+  useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
 
   // Start/reset timer when turn or round changes
   useEffect(() => {
@@ -37,6 +42,7 @@ export default function GameScreen() {
     const max = room?.timeSeconds ?? 15;
     setTimeLeft(max);
     timeLeftRef.current = max;
+    eliminatedSentRef.current = false;
     setAnswer("");
     setAnimState("idle");
     setRejectionReason("");
@@ -48,12 +54,13 @@ export default function GameScreen() {
     timerRef.current = setInterval(() => {
       if (timerPausedRef.current) return;
       setTimeLeft((prev) => {
-        if (prev <= 1) {
+        const next = prev - 1;
+        if (next <= 0) {
           clearInterval(timerRef.current!);
           handleTimeOut();
           return 0;
         }
-        return prev - 1;
+        return next;
       });
     }, 1000);
 
@@ -82,9 +89,20 @@ export default function GameScreen() {
         }
         if (data.type === "player_eliminated" && data.room) {
           setRoom(data.room);
+          if (data.nextPlayerId) {
+            setGameState({
+              subcategory: gameState?.subcategory ?? "",
+              currentPlayerId: data.nextPlayerId,
+              acceptedAnswers: gameState?.acceptedAnswers ?? [],
+              timeLeft: timerMax,
+              round: (gameState?.round ?? 1) + 1,
+            });
+          }
         }
         if (data.type === "game_over") {
-          setTimeout(() => setLocation("/result"), 800);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setGameOverOverlay({ winnerName: data.winnerName ?? "Nobody" });
+          setTimeout(() => setLocation("/result"), 2200);
         }
         if (data.type === "answer_result") {
           timerPausedRef.current = false;
@@ -124,15 +142,17 @@ export default function GameScreen() {
       setLocation("/result");
       return;
     }
-    if (timeLeftRef.current > 0) return;
-    if (isMyTurn && ws) {
+    // Only send once per turn; use ref so stale closure doesn't re-fire
+    if (eliminatedSentRef.current) return;
+    if (isMyTurnRef.current && ws) {
+      eliminatedSentRef.current = true;
       ws.send(JSON.stringify({
         type: "player_eliminated",
         roomCode: room.code,
         playerId: player.id,
       }));
     }
-  }, [player, room, isSolo, isMyTurn, ws, setLocation]);
+  }, [player, room, isSolo, ws, setLocation]);
 
   function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -199,6 +219,22 @@ export default function GameScreen() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground font-mono">Loading game...</p>
+      </div>
+    );
+  }
+
+  if (gameOverOverlay) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/20 blur-3xl animate-pulse" />
+        </div>
+        <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-4 relative z-10">Game Over</p>
+        <h1 className="text-5xl font-bold text-primary neon-text relative z-10" style={{ fontFamily: "'Space Mono', monospace" }}>
+          {gameOverOverlay.winnerName}
+        </h1>
+        <p className="text-xl text-foreground mt-3 relative z-10">won! 🏆</p>
+        <p className="text-xs text-muted-foreground font-mono mt-8 relative z-10">Going to results...</p>
       </div>
     );
   }

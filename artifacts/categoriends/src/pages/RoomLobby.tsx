@@ -3,6 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type Room } from "@/context/GameContext";
 import { useGenerateSubcategory } from "@workspace/api-client-react";
+import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 export default function RoomLobby() {
   const { t } = useTranslation();
@@ -38,6 +39,19 @@ export default function RoomLobby() {
 
   function handleStart() {
     if (!room || !ws) return;
+
+    const allPresets = [...MAIN_CATEGORIES_EN, ...MAIN_CATEGORIES_TR];
+    const isCustom = !allPresets.includes(room.category);
+
+    if (isCustom) {
+      ws.send(JSON.stringify({
+        type: "start_game",
+        roomCode: room.code,
+        subcategory: room.category,
+      }));
+      return;
+    }
+
     generateMutation.mutate(
       { data: { category: room.category, language: room.language } },
       {

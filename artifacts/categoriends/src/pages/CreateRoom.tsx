@@ -82,6 +82,17 @@ export default function CreateRoom() {
   function handleStartGame() {
     if (!room || !ws) return;
 
+    // If the host typed a custom category, use it verbatim — no AI lookup
+    const isCustom = !!(custom.trim());
+    if (isCustom) {
+      ws.send(JSON.stringify({
+        type: "start_game",
+        roomCode: room.code,
+        subcategory: custom.trim(),
+      }));
+      return;
+    }
+
     generateMutation.mutate(
       { data: { category: room.category, language: lang } },
       {
@@ -101,6 +112,12 @@ export default function CreateRoom() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm">
+          <button
+            onClick={() => setStep("setup")}
+            className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
+          >
+            &larr; Back
+          </button>
           <h2 className="text-2xl font-bold mb-1">{t("lobby.waiting")}</h2>
           <p className="text-muted-foreground text-sm mb-6">
             {mode === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}

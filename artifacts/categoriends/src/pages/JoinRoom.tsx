@@ -43,21 +43,26 @@ export default function JoinRoom() {
     const playerId = `player-${Date.now()}`;
     const p: Player = { id: playerId, name: name.trim(), score: 0, eliminated: false };
     setPlayer(p);
-    connectWs();
+
+    // Use the socket directly (avoids stale ws state)
+    const socket = connectWs();
 
     const tryJoin = () => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
           type: "join",
           roomCode: code.trim().toUpperCase(),
           playerId,
           playerName: name.trim(),
         }));
+      } else if (socket.readyState === WebSocket.CONNECTING) {
+        setTimeout(tryJoin, 100);
       } else {
-        setTimeout(tryJoin, 150);
+        setError("Connection failed. Please try again.");
+        setJoining(false);
       }
     };
-    setTimeout(tryJoin, 200);
+    tryJoin();
   }
 
   return (
