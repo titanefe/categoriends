@@ -8,7 +8,7 @@ type TranslationKeys = {
 
 const en: TranslationKeys = {
   "app.title": "Categoriends",
-  "app.subtitle": "Midnight word battles",
+  "app.subtitle": "Categories with Friends!",
   "home.solo": "Solo Mode",
   "home.createRoom": "Create Room",
   "home.joinRoom": "Join Room",
@@ -90,7 +90,7 @@ const en: TranslationKeys = {
 
 const tr: TranslationKeys = {
   "app.title": "Categoriends",
-  "app.subtitle": "Gece yarısı kelime savaşları",
+  "app.subtitle": "Muhteşem Kelime Savaşları",
   "home.solo": "Tek Oyunculu",
   "home.createRoom": "Oda Kur",
   "home.joinRoom": "Odaya Katıl",
