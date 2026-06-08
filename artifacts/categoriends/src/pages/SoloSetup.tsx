@@ -83,11 +83,11 @@ export default function SoloSetup() {
           onClick={() => setLocation("/")}
           className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
         >
-          &larr; Back
+          &larr; {t("nav.back")}
         </button>
 
         <h2 className="text-2xl font-bold mb-1 text-foreground">{t("setup.chooseCategory")}</h2>
-        <p className="text-muted-foreground text-sm mb-6">Solo Mode</p>
+        <p className="text-muted-foreground text-sm mb-6">{t("setup.soloMode")}</p>
 
         <div className="grid grid-cols-2 gap-2 mb-5">
           {categories.map((cat) => (

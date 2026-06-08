@@ -239,7 +239,7 @@ export default function GameScreen() {
   if (!gameState) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground font-mono">Loading game...</p>
+        <p className="text-muted-foreground font-mono">{t("game.loadingGame")}</p>
       </div>
     );
   }
@@ -284,7 +284,7 @@ export default function GameScreen() {
         >
           <div className="mx-4 w-full max-w-xs bg-card border border-primary/40 rounded-2xl p-8 text-center shadow-2xl">
             <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-3">
-              Sub-category
+              {t("game.subcategoryLabel")}
             </p>
             <h2 className="text-3xl font-bold text-primary neon-text mb-6" style={{ fontFamily: "'Space Mono', monospace" }}>
               {gameState.subcategory}
@@ -296,7 +296,7 @@ export default function GameScreen() {
               {t("game.popupStart")}
             </button>
             <p className="text-xs text-muted-foreground font-mono mt-3">
-              (auto-dismisses in 4s)
+              {t("game.popupAutoDismiss")}
             </p>
           </div>
         </div>
@@ -305,7 +305,7 @@ export default function GameScreen() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase">Sub-category</p>
+          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase">{t("game.subcategoryLabel")}</p>
           <h1
             data-testid="text-subcategory"
             className="text-xl font-bold text-foreground leading-tight mt-0.5"
@@ -389,7 +389,7 @@ export default function GameScreen() {
           ))}
           {gameState.acceptedAnswers.length === 0 && (
             <p className="text-muted-foreground/40 text-xs font-mono text-center py-6">
-              No answers yet — be the first!
+              {t("game.noAnswersYet")}
             </p>
           )}
         </div>

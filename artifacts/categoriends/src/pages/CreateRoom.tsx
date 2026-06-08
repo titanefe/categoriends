@@ -121,7 +121,7 @@ export default function CreateRoom() {
             onClick={() => setStep("setup")}
             className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
           >
-            &larr; Back
+            &larr; {t("nav.back")}
           </button>
           <h2 className="text-2xl font-bold mb-1">{t("lobby.waiting")}</h2>
           <p className="text-muted-foreground text-sm mb-6">
@@ -183,7 +183,7 @@ export default function CreateRoom() {
           onClick={() => setLocation("/")}
           className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
         >
-          &larr; Back
+          &larr; {t("nav.back")}
         </button>
 
         <h2 className="text-2xl font-bold mb-1">{t("home.createRoom")}</h2>

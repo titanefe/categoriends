@@ -35,8 +35,8 @@ export default function JoinRoom() {
   }, [ws, setRoom, setLocation]);
 
   function handleJoin() {
-    if (!code.trim()) { setError("Please enter a room code."); return; }
-    if (!name.trim()) { setError("Please enter your name."); return; }
+    if (!code.trim()) { setError(t("join.error.enterCode")); return; }
+    if (!name.trim()) { setError(t("join.error.enterName")); return; }
     setError("");
     setJoining(true);
 
@@ -44,7 +44,6 @@ export default function JoinRoom() {
     const p: Player = { id: playerId, name: name.trim(), score: 0, eliminated: false };
     setPlayer(p);
 
-    // Use the socket directly (avoids stale ws state)
     const socket = connectWs();
 
     const tryJoin = () => {
@@ -58,7 +57,7 @@ export default function JoinRoom() {
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryJoin, 100);
       } else {
-        setError("Connection failed. Please try again.");
+        setError(t("setup.error.connectionFailed"));
         setJoining(false);
       }
     };
@@ -73,11 +72,11 @@ export default function JoinRoom() {
           onClick={() => setLocation("/")}
           className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
         >
-          &larr; Back
+          &larr; {t("nav.back")}
         </button>
 
         <h2 className="text-2xl font-bold mb-1">{t("join.title")}</h2>
-        <p className="text-muted-foreground text-sm mb-6">Enter the room code from your host</p>
+        <p className="text-muted-foreground text-sm mb-6">{t("join.subtitle")}</p>
 
         <div className="flex flex-col gap-4 mb-6">
           <input
@@ -110,7 +109,7 @@ export default function JoinRoom() {
           {joining ? (
             <span className="flex items-center justify-center gap-2">
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Joining...
+              {t("join.joining")}
             </span>
           ) : t("join.button")}
         </button>

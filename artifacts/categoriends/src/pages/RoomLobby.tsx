@@ -19,12 +19,16 @@ export default function RoomLobby() {
         const data = JSON.parse(evt.data);
         if (data.type === "player_joined" && data.room) setRoom(data.room as Room);
         if (data.type === "player_left" && data.room) setRoom(data.room as Room);
+        if (data.type === "room_reset" && data.room) {
+          setRoom(data.room as Room);
+          setGameState(null);
+        }
         if (data.type === "game_started") {
           setGameState({
             subcategory: data.subcategory,
             currentPlayerId: data.firstPlayerId,
             acceptedAnswers: [],
-            timeLeft: 10,
+            timeLeft: room?.timeSeconds ?? 15,
             round: 1,
           });
           setLocation("/game");
@@ -33,7 +37,7 @@ export default function RoomLobby() {
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, setRoom, setLocation, setGameState]);
+  }, [ws, setRoom, setLocation, setGameState, room?.timeSeconds]);
 
   const isHost = player?.id === room?.hostId;
 
@@ -69,7 +73,7 @@ export default function RoomLobby() {
   if (!room) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground font-mono">Loading room...</p>
+        <p className="text-muted-foreground font-mono">{t("lobby.loading")}</p>
       </div>
     );
   }
@@ -102,10 +106,10 @@ export default function RoomLobby() {
                 <div className="w-2 h-2 rounded-full bg-accent" />
                 <span className="text-sm font-medium">{p.name}</span>
                 {p.id === room.hostId && (
-                  <span className="ml-auto text-xs text-primary font-mono">host</span>
+                  <span className="ml-auto text-xs text-primary font-mono">{t("lobby.host")}</span>
                 )}
                 {p.id === player?.id && p.id !== room.hostId && (
-                  <span className="ml-auto text-xs text-muted-foreground font-mono">you</span>
+                  <span className="ml-auto text-xs text-muted-foreground font-mono">{t("lobby.you")}</span>
                 )}
               </div>
             ))}
@@ -114,7 +118,7 @@ export default function RoomLobby() {
 
         {isHost && room.players.length < 2 && (
           <p className="text-muted-foreground text-xs text-center font-mono mb-4">
-            Waiting for at least 1 more player to join...
+            {t("lobby.needMorePlayers")}
           </p>
         )}
 
@@ -128,13 +132,13 @@ export default function RoomLobby() {
             {generateMutation.isPending ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Generating...
+                {t("lobby.generating")}
               </span>
             ) : t("lobby.start")}
           </button>
         ) : (
           <p className="text-center text-muted-foreground text-sm font-mono py-4">
-            Waiting for host to start...
+            {t("lobby.waitingToStart")}
           </p>
         )}
       </div>
