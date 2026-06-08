@@ -68,21 +68,33 @@ router.post("/game/verify-answer", async (req, res): Promise<void> => {
 
   const systemPrompt =
     language === "tr"
-      ? `Sen bir kelime oyunu hakemisin. İki şeyi değerlendir:
-1. Oyuncunun cevabı bu alt kategoriye uygun mu?
-2. Bu cevap (veya çok benzer bir versiyonu) daha önce kullanılmış mı?
+      ? `Sen bir kelime oyunu hakemisin. Bir cevabın GEÇERLİ mi GEÇERSIZ mi olduğuna karar ver.
 
-YAZIM HATASI KURALI: Küçük yazım hataları olsa bile, kastedilenin ne olduğu açıkça anlaşılıyorsa cevabı GEÇERLİ say.
-TEKRAR KURALI: Eğer cevap, daha önce kabul edilmiş bir cevapla aynı şeyi ifade ediyorsa GEÇERSIZ say.
+ADIM 1 — KATEGORİ UYUMU: Cevap alt kategoriye uyuyor mu? Açıkça yanlışsa GEÇERSIZ.
+
+ADIM 2 — TEKRAR KONTROLÜ: Daha önce kabul edilmiş cevaplarla karşılaştır. Daha önce kabul edilmiş herhangi bir cevap, bu cevapla aynı gerçek dünya nesnesini/kavramını ifade ediyorsa — yazım, dil veya büyük/küçük harf farkı ne olursa olsun — GEÇERSIZ say.
+
+TEMEL KURALLAR:
+- Yazım hatası olan cevaplar kabul edilebilir: "Spiderman" → daha önce kabul edilmediyse GEÇERLİ.
+- Farklı dillerdeki karşılıklar aynı cevaptır: "kedi" ve "cat" tekrardır.
+- Yanlış yazılmış bir versiyon kabul edildiyse, doğru yazılmış versiyonu da REDDET.
+- Doğru yazılmış versiyon kabul edildiyse, yanlış yazılmış versiyonu da REDDET.
+- Bir gerçek dünya nesnesinin yalnızca ilk gönderilen versiyonu sayılır.
 
 Yanıtını SADECE şu JSON formatında ver: {"valid": true/false, "reason": "tek cümle açıklama"}
 Başka hiçbir şey yazma.`
-      : `You are a word game judge. Evaluate two things:
-1. Does the player's answer fit this sub-category?
-2. Has this answer (or a very similar version) already been used?
+      : `You are a word game judge. Decide if a player's answer is VALID or INVALID.
 
-TYPO RULE: Accept answers with minor spelling mistakes if the intended word is clearly understood.
-DUPLICATE RULE: If the answer refers to the same thing as a previously accepted answer — even with different spelling — mark it INVALID.
+STEP 1 — CATEGORY FIT: Does the answer fit the sub-category? If clearly wrong, mark INVALID.
+
+STEP 2 — DUPLICATE CHECK: Compare against all previously accepted answers. If ANY previously accepted answer refers to the same real-world thing — regardless of spelling, language, or casing — mark INVALID.
+
+KEY RULES:
+- Misspelled answers are fine: "Spiderman" → VALID if no equivalent has been accepted yet.
+- Cross-language equivalents are the same answer: "cat" and "kedi" are duplicates of each other.
+- If a misspelled version was already accepted, reject the correctly spelled version too.
+- If the correct version was already accepted, reject any misspelled version too.
+- Only the FIRST submitted variant of any real-world thing counts.
 
 Respond ONLY in this JSON format: {"valid": true/false, "reason": "one sentence explanation"}
 Write nothing else.`;
