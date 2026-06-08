@@ -21,19 +21,41 @@ export default function GameScreen() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [gameOverOverlay, setGameOverOverlay] = useState<GameOverOverlay>(null);
-  const eliminatedSentRef = useRef(false);
+  const [showCategoryPopup, setShowCategoryPopup] = useState(true);
 
+  const eliminatedSentRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timerPausedRef = useRef(false);
+  const timerPausedRef = useRef(true); // starts paused until popup dismissed
   const timeLeftRef = useRef(timerMax);
   const isMyTurnRef = useRef(false);
+  const hasShownPopupRef = useRef(false);
+
   const isSolo = room?.mode === "solo";
   const isMyTurn = gameState?.currentPlayerId === player?.id;
+  const isEliminated = room?.players?.find((p) => p.id === player?.id)?.eliminated ?? false;
 
-  // Keep refs in sync
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
   useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
+
+  // Auto-dismiss category popup after 4 seconds
+  useEffect(() => {
+    if (!showCategoryPopup) return;
+    const timer = setTimeout(() => dismissPopup(), 4000);
+    return () => clearTimeout(timer);
+  }, [showCategoryPopup]);
+
+  function dismissPopup() {
+    hasShownPopupRef.current = true;
+    setShowCategoryPopup(false);
+    timerPausedRef.current = false;
+    if (isMyTurnRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 50);
+    }
+  }
 
   // Start/reset timer when turn or round changes
   useEffect(() => {
@@ -47,7 +69,9 @@ export default function GameScreen() {
     setAnimState("idle");
     setRejectionReason("");
     setVerifying(false);
-    timerPausedRef.current = false;
+
+    // Keep paused until popup dismissed on first load; resume immediately on subsequent turns
+    timerPausedRef.current = !hasShownPopupRef.current;
 
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -61,8 +85,11 @@ export default function GameScreen() {
       }
     }, 1000);
 
-    if (gameState.currentPlayerId === player?.id) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+    if (gameState.currentPlayerId === player?.id && hasShownPopupRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
     }
 
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -125,12 +152,11 @@ export default function GameScreen() {
     setAnimState("rejected");
     setVerifying(false);
     timerPausedRef.current = false;
-    // Auto-focus keyboard again after shake animation
     setTimeout(() => {
       setAnimState("idle");
       setRejectionReason("");
       inputRef.current?.focus();
-    }, 800);
+    }, 2000);
   }
 
   const handleTimeOut = useCallback(() => {
@@ -139,7 +165,6 @@ export default function GameScreen() {
       setLocation("/result");
       return;
     }
-    // Only send once per turn; use ref so stale closure doesn't re-fire
     if (eliminatedSentRef.current) return;
     if (isMyTurnRef.current && ws) {
       eliminatedSentRef.current = true;
@@ -154,9 +179,8 @@ export default function GameScreen() {
   function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const trimmed = answer.trim();
-    if (!trimmed || verifying || !isMyTurn) return;
+    if (!trimmed || verifying || !isMyTurn || isEliminated) return;
 
-    // Pause timer during AI processing (especially important in last few seconds)
     timerPausedRef.current = true;
     setVerifying(true);
     const previousAnswers = gameState?.acceptedAnswers ?? [];
@@ -226,12 +250,14 @@ export default function GameScreen() {
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/20 blur-3xl animate-pulse" />
         </div>
-        <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-4 relative z-10">Game Over</p>
+        <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-4 relative z-10">
+          {t("result.title")}
+        </p>
         <h1 className="text-5xl font-bold text-primary neon-text relative z-10" style={{ fontFamily: "'Space Mono', monospace" }}>
           {gameOverOverlay.winnerName}
         </h1>
-        <p className="text-xl text-foreground mt-3 relative z-10">won! 🏆</p>
-        <p className="text-xs text-muted-foreground font-mono mt-8 relative z-10">Going to results...</p>
+        <p className="text-xl text-foreground mt-3 relative z-10">{t("game.won")}</p>
+        <p className="text-xs text-muted-foreground font-mono mt-8 relative z-10">{t("game.goingToResults")}</p>
       </div>
     );
   }
@@ -243,12 +269,39 @@ export default function GameScreen() {
     ? "hsl(45, 100%, 60%)"
     : "hsl(0, 85%, 60%)";
   const isDangerous = timeLeft <= Math.ceil(timerMax * 0.2);
+  const effectivePaused = timerPausedRef.current;
 
   const currentPlayer = room?.players?.find((p) => p.id === gameState.currentPlayerId);
   const myTurn = gameState.currentPlayerId === player?.id;
 
   return (
     <div className="min-h-screen bg-background flex flex-col select-none">
+      {/* Category popup overlay — shown at game start */}
+      {showCategoryPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm"
+          onClick={dismissPopup}
+        >
+          <div className="mx-4 w-full max-w-xs bg-card border border-primary/40 rounded-2xl p-8 text-center shadow-2xl">
+            <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-3">
+              Sub-category
+            </p>
+            <h2 className="text-3xl font-bold text-primary neon-text mb-6" style={{ fontFamily: "'Space Mono', monospace" }}>
+              {gameState.subcategory}
+            </h2>
+            <button
+              onClick={dismissPopup}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:opacity-90 transition-all"
+            >
+              {t("game.popupStart")}
+            </button>
+            <p className="text-xs text-muted-foreground font-mono mt-3">
+              (auto-dismisses in 4s)
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
@@ -275,16 +328,16 @@ export default function GameScreen() {
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
             data-testid="timer-bar"
-            className={`h-full rounded-full timer-bar ${isDangerous && !timerPausedRef.current ? "animate-pulse-danger" : ""}`}
+            className={`h-full rounded-full timer-bar ${isDangerous && !effectivePaused ? "animate-pulse-danger" : ""}`}
             style={{ width: `${timerPercent}%`, backgroundColor: verifying ? "hsl(45, 100%, 60%)" : timerColor }}
           />
         </div>
         <div className="flex justify-between mt-1">
           <span className="text-xs text-muted-foreground font-mono">
             {verifying
-              ? "Checking..."
+              ? t("game.checking")
               : myTurn
-              ? (isDangerous ? "HURRY!" : t("game.yourTurn"))
+              ? (isDangerous ? t("game.hurry") : t("game.yourTurn"))
               : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
           </span>
           <span
@@ -342,48 +395,77 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Rejection reason */}
-      {rejectionReason && (
-        <div className="px-4 mb-1">
-          <p data-testid="text-rejection-reason" className="text-destructive text-xs text-center font-mono">
-            {rejectionReason}
-          </p>
-        </div>
-      )}
-
-      {/* Input area */}
-      <div className="px-4 pt-2" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}>
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <div className={`flex-1 relative rounded-xl overflow-hidden transition-all ${
-            animState === "accepted" ? "animate-flash-green" : animState === "rejected" ? "animate-flash-red animate-shake" : ""
-          }`}>
-            <input
-              ref={inputRef}
-              data-testid="input-answer"
-              type="text"
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder={isMyTurn ? t("game.answerPlaceholder") : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
-              disabled={!isMyTurn || verifying}
-              className="w-full px-4 py-4 bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base rounded-xl"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-            />
+      {/* Spectator banner for eliminated players */}
+      {isEliminated && !isSolo ? (
+        <div className="px-4 pb-4">
+          <div className="w-full py-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-center text-sm font-medium">
+            {t("game.spectatorBanner")}
           </div>
-          <button
-            data-testid="button-submit-answer"
-            type="submit"
-            disabled={!isMyTurn || verifying || !answer.trim()}
-            className="px-5 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.96] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-          >
-            {verifying ? (
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin block" />
-            ) : t("game.submit")}
-          </button>
-        </form>
-      </div>
+        </div>
+      ) : (
+        <>
+          {/* Rejection reason */}
+          {rejectionReason && (
+            <div className="px-4 mb-1">
+              <p data-testid="text-rejection-reason" className="text-destructive text-xs text-center font-mono">
+                {rejectionReason}
+              </p>
+            </div>
+          )}
+
+          {/* Mini timer badge above input */}
+          <div className="px-4 pt-1 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground font-mono">
+              {myTurn ? t("game.yourTurn") : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
+            </span>
+            <span
+              className={`text-sm font-bold font-mono px-2.5 py-0.5 rounded-full border transition-colors ${
+                verifying
+                  ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                  : isDangerous
+                  ? "border-destructive/40 text-destructive bg-destructive/10 animate-pulse"
+                  : "border-border text-muted-foreground bg-card"
+              }`}
+            >
+              {verifying ? "⏸" : `${timeLeft}s`}
+            </span>
+          </div>
+
+          {/* Input area */}
+          <div className="px-4 pt-1.5" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}>
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <div className={`flex-1 relative rounded-xl overflow-hidden transition-all ${
+                animState === "accepted" ? "animate-flash-green" : animState === "rejected" ? "animate-flash-red animate-shake" : ""
+              }`}>
+                <input
+                  ref={inputRef}
+                  data-testid="input-answer"
+                  type="text"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder={isMyTurn ? t("game.answerPlaceholder") : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
+                  disabled={!isMyTurn || verifying}
+                  className="w-full px-4 py-4 bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base rounded-xl"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+              </div>
+              <button
+                data-testid="button-submit-answer"
+                type="submit"
+                disabled={!isMyTurn || verifying || !answer.trim() || isEliminated}
+                className="px-5 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.96] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              >
+                {verifying ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin block" />
+                ) : t("game.submit")}
+              </button>
+            </form>
+          </div>
+        </>
+      )}
     </div>
   );
 }

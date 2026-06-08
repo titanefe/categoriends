@@ -22,17 +22,16 @@ export default function SoloSetup() {
   async function handleStart() {
     const category = custom.trim() || selected;
     if (!category) {
-      setError("Please select or type a category.");
+      setError(t("setup.error.selectCategory"));
       return;
     }
     setError("");
 
     const playerId = `solo-${Date.now()}`;
-    const playerName = "You";
+    const playerName = t("game.soloPlayerName");
 
     setPlayer({ id: playerId, name: playerName, score: 0, eliminated: false });
 
-    // Custom category → use exactly as typed, no AI lookup
     if (custom.trim()) {
       const subcategory = custom.trim();
       setRoom({
@@ -119,23 +118,22 @@ export default function SoloSetup() {
           />
         </div>
 
-        {/* Time per turn */}
         <div className="mb-6">
           <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
-            Time per turn
+            {t("setup.timePerturn")}
           </p>
           <div className="flex gap-2 flex-wrap">
-            {TIME_OPTIONS.map((t) => (
+            {TIME_OPTIONS.map((sec) => (
               <button
-                key={t}
-                onClick={() => setTimeSeconds(t)}
+                key={sec}
+                onClick={() => setTimeSeconds(sec)}
                 className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
-                  timeSeconds === t
+                  timeSeconds === sec
                     ? "border-accent bg-accent/15 text-accent"
                     : "border-border text-muted-foreground hover:border-accent/50"
                 }`}
               >
-                {t}s
+                {sec}s
               </button>
             ))}
           </div>

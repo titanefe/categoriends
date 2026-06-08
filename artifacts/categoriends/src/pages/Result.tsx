@@ -1,18 +1,38 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
 
 export default function Result() {
   const { t } = useTranslation();
-  const { room, gameState, player, setRoom, setGameState, disconnectWs } = useGame();
+  const { room, gameState, player, setRoom, setGameState, disconnectWs, ws } = useGame();
   const [, setLocation] = useLocation();
 
   const isSolo = room?.mode === "solo";
   const score = isSolo ? (gameState?.acceptedAnswers.length ?? 0) : 0;
+  const subcategory = gameState?.subcategory ?? "";
 
   const allPlayers = room?.players ?? [];
   const sorted = [...allPlayers].sort((a, b) => b.score - a.score);
   const winner = isSolo ? player : sorted[0];
+  const isHost = player?.id === room?.hostId;
+
+  // Listen for room_reset (multiplayer rematch)
+  useEffect(() => {
+    if (!ws || isSolo) return;
+    const handleMsg = (evt: MessageEvent) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.type === "room_reset" && data.room) {
+          setRoom(data.room);
+          setGameState(null);
+          setLocation(`/room/${data.room.code}`);
+        }
+      } catch {}
+    };
+    ws.addEventListener("message", handleMsg);
+    return () => ws.removeEventListener("message", handleMsg);
+  }, [ws, isSolo, setRoom, setGameState, setLocation]);
 
   function handlePlayAgain() {
     disconnectWs();
@@ -21,10 +41,14 @@ export default function Result() {
     setLocation("/");
   }
 
+  function handleReturnToLobby() {
+    if (!ws || !room) return;
+    ws.send(JSON.stringify({ type: "reset_room", roomCode: room.code }));
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
-        {/* Background glow */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/15 blur-3xl" />
         </div>
@@ -47,12 +71,20 @@ export default function Result() {
                 {winner.name}
               </p>
               {isSolo && (
-                <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-muted-foreground text-sm">{t("result.score")}</span>
-                  <span data-testid="text-final-score" className="text-5xl font-bold font-mono text-accent neon-cyan">
-                    {score}
-                  </span>
-                </div>
+                <>
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <span className="text-muted-foreground text-sm">{t("result.score")}</span>
+                    <span data-testid="text-final-score" className="text-5xl font-bold font-mono text-accent neon-cyan">
+                      {score}
+                    </span>
+                  </div>
+                  {subcategory && (
+                    <p className="text-muted-foreground text-xs font-mono mt-3">
+                      <span className="text-muted-foreground/60">{t("result.subcategory")}</span>{" "}
+                      <span className="text-foreground/80">{subcategory}</span>
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -60,7 +92,9 @@ export default function Result() {
           {/* Multiplayer scores */}
           {!isSolo && sorted.length > 0 && (
             <div className="bg-card border border-border rounded-xl p-4 mb-8 text-left">
-              <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">Final Scores</p>
+              <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">
+                {t("result.finalScores")}
+              </p>
               <div className="flex flex-col gap-2">
                 {sorted.map((p, idx) => (
                   <div
@@ -85,10 +119,31 @@ export default function Result() {
             </div>
           )}
 
+          {/* Multiplayer: host gets "Return to Lobby", others wait */}
+          {!isSolo ? (
+            isHost ? (
+              <button
+                data-testid="button-return-lobby"
+                onClick={handleReturnToLobby}
+                className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary mb-3"
+              >
+                {t("result.returnToLobby")}
+              </button>
+            ) : (
+              <p className="text-muted-foreground text-sm font-mono mb-6">
+                {t("result.waitingForHost")}
+              </p>
+            )
+          ) : null}
+
           <button
             data-testid="button-play-again"
             onClick={handlePlayAgain}
-            className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary"
+            className={`w-full py-4 rounded-xl font-semibold text-lg transition-all active:scale-[0.98] ${
+              isSolo
+                ? "bg-primary text-primary-foreground hover:opacity-90 animate-glow-primary"
+                : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
+            }`}
           >
             {t("result.playAgain")}
           </button>

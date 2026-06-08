@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { openai } from "../lib/openai";
 import { GenerateSubcategoryBody, VerifyAnswerBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
+import { SUBCATEGORY_POOLS, CATEGORY_TO_KEY } from "../lib/subcategoryPools";
 
 const router: IRouter = Router();
 
@@ -14,61 +15,23 @@ router.post("/game/generate-subcategory", async (req, res): Promise<void> => {
 
   const { category, language } = parsed.data;
 
+  // If it's a predefined category, pick randomly from the large pool — no AI needed
+  const key = CATEGORY_TO_KEY[category];
+  if (key) {
+    const pool = SUBCATEGORY_POOLS[key];
+    const options = language === "tr" ? pool.tr : pool.en;
+    const subcategory = options[Math.floor(Math.random() * options.length)];
+    res.json({ subcategory });
+    return;
+  }
+
+  // Custom category: ask AI to generate a fitting sub-category
   const systemPrompt =
     language === "tr"
       ? `Sen bir kelime oyunu asistanısın. Verilen kategoriye uygun, GENIŞ ve eğlenceli bir alt kategori üret.
-
-KURALLAR:
-- Alt kategori kısa (2-4 kelime) ve basit olmalı
-- Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı
-- Çok özgün veya spesifik OLMA
-- Sadece alt kategoriyi yaz, başka hiçbir şey yazma
-
-İYİ ÖRNEKLER:
-"Yiyecek & İçecek" → "Fast Food Zincirleri"
-"Yiyecek & İçecek" → "Dondurma Markaları"  
-"Yiyecek & İçecek" → "Gazlı İçecekler"
-"Spor" → "Olimpik Sporlar"
-"Spor" → "Futbol Dünya Kupası Ülkeleri"
-"Müzik" → "90'lar Pop Sanatçıları"
-"Müzik" → "İngiliz Rock Grupları"
-"Film & Dizi" → "Marvel Filmleri"
-"Film & Dizi" → "Disney Animasyon Filmleri"
-"Hayvanlar" → "Safari Hayvanları"
-"Hayvanlar" → "Popüler Köpek Irkları"
-"Coğrafya" → "Avrupa Başkentleri"
-"Tarih" → "Ünlü Savaşlar"
-
-KÖTÜ ÖRNEKLER (çok spesifik):
-"2010'ların Ödüllü Bağımsız Avrupa Filmleri" ❌
-"1800'lerden Masa Oyunları" ❌`
+KURALLAR: Alt kategori kısa (2-4 kelime) ve basit olmalı. Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı. Sadece alt kategoriyi yaz, başka hiçbir şey yazma.`
       : `You are a word game assistant. Generate a BROAD, fun sub-category for the given category.
-
-RULES:
-- Keep it short (2-4 words) and simple
-- Must be broad enough that players can easily name 5-10 examples
-- Do NOT be overly specific or creative — keep it well-known
-- Output only the sub-category name, nothing else
-
-GOOD EXAMPLES:
-"Food & Drink" → "Fast Food Chains"
-"Food & Drink" → "Ice Cream Brands"
-"Food & Drink" → "Popular Snack Brands"
-"Sports" → "Olympic Sports"
-"Sports" → "Soccer World Cup Countries"
-"Music" → "90s Pop Artists"
-"Music" → "Rock Bands from the UK"
-"Film & TV" → "Marvel Superhero Movies"
-"Film & TV" → "Disney Animated Films"
-"Animals" → "African Safari Animals"
-"Animals" → "Popular Dog Breeds"
-"Geography" → "European Capital Cities"
-"History" → "Famous Wars"
-"Science" → "Planets in the Solar System"
-
-BAD EXAMPLES (too specific):
-"Award-Winning Independent European Films from the 2010s" ❌
-"Board Games from the 1800s" ❌`;
+RULES: Keep it short (2-4 words) and simple. Must be broad enough that players can easily name 5-10 examples. Output only the sub-category name, nothing else.`;
 
   const userPrompt =
     language === "tr"
@@ -109,9 +72,8 @@ router.post("/game/verify-answer", async (req, res): Promise<void> => {
 1. Oyuncunun cevabı bu alt kategoriye uygun mu?
 2. Bu cevap (veya çok benzer bir versiyonu) daha önce kullanılmış mı?
 
-YAZIM HATASI KURALI: Küçük yazım hataları veya imla yanlışları olsa bile, kastedilenin ne olduğu açıkça anlaşılıyorsa cevabı GEÇERLİ say. Örnek: "Macdonalds" → McDonald's GEÇERLİ.
-
-TEKRAR KURALI (ÖNEMLİ): Eğer cevap, daha önce kabul edilmiş bir cevapla aynı şeyi ifade ediyorsa (yazım farkı olsa bile) GEÇERSIZ say. Örnek: önceki cevap "Paris" ise "Pars" veya "paris" da GEÇERSIZ.
+YAZIM HATASI KURALI: Küçük yazım hataları olsa bile, kastedilenin ne olduğu açıkça anlaşılıyorsa cevabı GEÇERLİ say.
+TEKRAR KURALI: Eğer cevap, daha önce kabul edilmiş bir cevapla aynı şeyi ifade ediyorsa GEÇERSIZ say.
 
 Yanıtını SADECE şu JSON formatında ver: {"valid": true/false, "reason": "tek cümle açıklama"}
 Başka hiçbir şey yazma.`
@@ -119,9 +81,8 @@ Başka hiçbir şey yazma.`
 1. Does the player's answer fit this sub-category?
 2. Has this answer (or a very similar version) already been used?
 
-TYPO RULE: Accept answers with minor spelling mistakes or typos if the intended word is clearly understood. Example: "Macdonalds" → McDonald's is VALID.
-
-DUPLICATE RULE (IMPORTANT): If the answer refers to the same thing as a previously accepted answer — even with different spelling — mark it INVALID. Example: if "Paris" was already accepted, then "Parris" or "paris" is also INVALID. Compare meaning, not just exact spelling.
+TYPO RULE: Accept answers with minor spelling mistakes if the intended word is clearly understood.
+DUPLICATE RULE: If the answer refers to the same thing as a previously accepted answer — even with different spelling — mark it INVALID.
 
 Respond ONLY in this JSON format: {"valid": true/false, "reason": "one sentence explanation"}
 Write nothing else.`;

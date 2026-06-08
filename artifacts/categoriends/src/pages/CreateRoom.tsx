@@ -9,7 +9,7 @@ const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
-  const { setRoom, setPlayer, room, connectWs, ws } = useGame();
+  const { setRoom, setPlayer, setGameState, room, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<GameMode>("duel");
   const [selected, setSelected] = useState<string | null>(null);
@@ -38,25 +38,31 @@ export default function CreateRoom() {
           setRoom(data.room as Room);
         }
         if (data.type === "game_started") {
+          setGameState({
+            subcategory: data.subcategory,
+            currentPlayerId: data.firstPlayerId,
+            acceptedAnswers: [],
+            timeLeft: room?.timeSeconds ?? 15,
+            round: 1,
+          });
           setLocation("/game");
         }
       } catch {}
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, setRoom, setLocation]);
+  }, [ws, setRoom, setGameState, setLocation, room?.timeSeconds]);
 
   function handleCreate() {
     const category = custom.trim() || selected;
-    if (!category) { setError("Please select a category."); return; }
-    if (!name.trim()) { setError("Please enter your name."); return; }
+    if (!category) { setError(t("setup.error.selectCategory")); return; }
+    if (!name.trim()) { setError(t("setup.error.enterName")); return; }
     setError("");
 
     const playerId = `host-${Date.now()}`;
     const p: Player = { id: playerId, name: name.trim(), score: 0, eliminated: false };
     setPlayer(p);
 
-    // connectWs returns the socket immediately — use it directly
     const socket = connectWs();
 
     const tryCreate = () => {
@@ -73,7 +79,7 @@ export default function CreateRoom() {
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryCreate, 100);
       } else {
-        setError("Connection failed. Please try again.");
+        setError(t("setup.error.connectionFailed"));
       }
     };
     tryCreate();
@@ -82,7 +88,6 @@ export default function CreateRoom() {
   function handleStartGame() {
     if (!room || !ws) return;
 
-    // If the host typed a custom category, use it verbatim — no AI lookup
     const isCustom = !!(custom.trim());
     if (isCustom) {
       ws.send(JSON.stringify({
@@ -121,7 +126,7 @@ export default function CreateRoom() {
           <h2 className="text-2xl font-bold mb-1">{t("lobby.waiting")}</h2>
           <p className="text-muted-foreground text-sm mb-6">
             {mode === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}
-            {" — "}{timeSeconds}s per turn
+            {" — "}{timeSeconds}{t("setup.perTurnSuffix")}
           </p>
 
           <div className="bg-card border border-primary/30 rounded-xl p-5 mb-6 text-center">
@@ -146,7 +151,7 @@ export default function CreateRoom() {
 
           {(room?.players.length ?? 0) < 2 && (
             <p className="text-muted-foreground text-xs text-center font-mono mb-4">
-              Waiting for at least 1 more player to join...
+              {t("lobby.waitingForHost")}
             </p>
           )}
 
@@ -182,17 +187,19 @@ export default function CreateRoom() {
         </button>
 
         <h2 className="text-2xl font-bold mb-1">{t("home.createRoom")}</h2>
-        <p className="text-muted-foreground text-sm mb-6">Set up your game</p>
+        <p className="text-muted-foreground text-sm mb-6">{t("setup.createSubtitle")}</p>
 
         {/* Your name */}
         <div className="mb-5">
-          <label className="text-xs text-muted-foreground font-mono tracking-widest uppercase block mb-2">Your Name</label>
+          <label className="text-xs text-muted-foreground font-mono tracking-widest uppercase block mb-2">
+            {t("setup.yourName")}
+          </label>
           <input
             data-testid="input-player-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Enter your name"
+            placeholder={t("setup.yourNamePlaceholder")}
             className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           />
         </div>
@@ -218,7 +225,9 @@ export default function CreateRoom() {
 
         {/* Time per turn */}
         <div className="mb-5">
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">Time per turn</p>
+          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
+            {t("setup.timePerturn")}
+          </p>
           <div className="flex gap-2 flex-wrap">
             {TIME_OPTIONS.map((sec) => (
               <button
