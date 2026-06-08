@@ -40,6 +40,15 @@ export default function GameScreen() {
   useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
   useEffect(() => { isEliminatedRef.current = isEliminated; }, [isEliminated]);
 
+  // If state was wiped by a page refresh, redirect home after a short grace period
+  useEffect(() => {
+    if (gameState) return;
+    const timer = setTimeout(() => {
+      if (!gameState) setLocation("/");
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [gameState, setLocation]);
+
   // Auto-dismiss category popup after 4 seconds
   useEffect(() => {
     if (!showCategoryPopup) return;
