@@ -350,7 +350,17 @@ export function setupWebSocket(server: Server): WebSocketServer {
         }
       } else {
         // Lobby or finished: remove the player normally
+        const wasHost = room.hostId === playerId;
         removePlayerFromRoom(roomCode, playerId);
+
+        // Promote the next player if the host left
+        if (wasHost) {
+          const remaining = getRoom(roomCode)?.players ?? [];
+          if (remaining.length > 0) {
+            updateRoom(roomCode, { hostId: remaining[0].id });
+          }
+        }
+
         broadcastAll(roomCode, {
           type: "player_left",
           playerId,

@@ -17,7 +17,7 @@ export default function Result() {
   const winner = isSolo ? player : sorted[0];
   const isHost = player?.id === room?.hostId;
 
-  // Listen for room_reset (multiplayer rematch)
+  // Listen for room_reset and player_left (multiplayer)
   useEffect(() => {
     if (!ws || isSolo) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -27,6 +27,10 @@ export default function Result() {
           setRoom(data.room);
           setGameState(null);
           setLocation(`/room/${data.room.code}`);
+        }
+        // Keep room in sync so host promotion is reflected immediately
+        if (data.type === "player_left" && data.room) {
+          setRoom(data.room);
         }
       } catch {}
     };
@@ -119,22 +123,16 @@ export default function Result() {
             </div>
           )}
 
-          {/* Multiplayer: host gets "Return to Lobby", others wait */}
-          {!isSolo ? (
-            isHost ? (
-              <button
-                data-testid="button-return-lobby"
-                onClick={handleReturnToLobby}
-                className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary mb-3"
-              >
-                {t("result.returnToLobby")}
-              </button>
-            ) : (
-              <p className="text-muted-foreground text-sm font-mono mb-6">
-                {t("result.waitingForHost")}
-              </p>
-            )
-          ) : null}
+          {/* Multiplayer: everyone can return to lobby */}
+          {!isSolo && (
+            <button
+              data-testid="button-return-lobby"
+              onClick={handleReturnToLobby}
+              className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary mb-3"
+            >
+              {t("result.returnToLobby")}
+            </button>
+          )}
 
           <button
             data-testid="button-play-again"
