@@ -53,15 +53,12 @@ export default function GameScreen() {
 
     timerRef.current = setInterval(() => {
       if (timerPausedRef.current) return;
-      setTimeLeft((prev) => {
-        const next = prev - 1;
-        if (next <= 0) {
-          clearInterval(timerRef.current!);
-          handleTimeOut();
-          return 0;
-        }
-        return next;
-      });
+      timeLeftRef.current -= 1;
+      setTimeLeft(timeLeftRef.current);
+      if (timeLeftRef.current <= 0) {
+        clearInterval(timerRef.current!);
+        handleTimeOut();
+      }
     }, 1000);
 
     if (gameState.currentPlayerId === player?.id) {
