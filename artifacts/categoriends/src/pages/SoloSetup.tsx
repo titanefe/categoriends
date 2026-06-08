@@ -32,6 +32,19 @@ export default function SoloSetup() {
 
     setPlayer({ id: playerId, name: playerName, score: 0, eliminated: false });
 
+    // Custom category → use exactly as typed, no AI lookup
+    if (custom.trim()) {
+      const subcategory = custom.trim();
+      setRoom({
+        code: "SOLO", mode: "solo", hostId: playerId,
+        players: [{ id: playerId, name: playerName, score: 0, eliminated: false }],
+        status: "playing", subcategory, category, language: lang, timeSeconds,
+      });
+      setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: timeSeconds, round: 1 });
+      setLocation("/game");
+      return;
+    }
+
     generateMutation.mutate(
       { data: { category, language: lang } },
       {
