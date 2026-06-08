@@ -4,7 +4,7 @@ import { useTranslation } from "@/i18n/translations";
 import { useGame, type Room, type Player } from "@/context/GameContext";
 
 export default function JoinRoom() {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const { setRoom, setPlayer, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [code, setCode] = useState("");
@@ -22,7 +22,11 @@ export default function JoinRoom() {
           setLocation(`/room/${data.room.code}`);
         }
         if (data.type === "error") {
-          setError(data.message || "Failed to join room.");
+          setError(
+            data.message === "wrong_language"
+              ? t("join.error.wrongLanguage")
+              : data.message || "Failed to join room."
+          );
           setJoining(false);
         }
         if (data.type === "game_started") {
@@ -53,6 +57,7 @@ export default function JoinRoom() {
           roomCode: code.trim().toUpperCase(),
           playerId,
           playerName: name.trim(),
+          language: lang,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryJoin, 100);
