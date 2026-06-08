@@ -52,6 +52,25 @@ function sendToSocket(ws: WebSocket, message: object): void {
   }
 }
 
+function checkAndEndGame(roomCode: string): boolean {
+  const room = getRoom(roomCode);
+  if (!room || room.status !== "playing") return false;
+  const activePlayers = room.players.filter((p) => !p.eliminated);
+  if (activePlayers.length <= 1) {
+    const winner = activePlayers[0] ?? null;
+    updateRoom(roomCode, { status: "finished" });
+    const scores = room.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
+    broadcastAll(roomCode, {
+      type: "game_over",
+      winnerId: winner?.id ?? null,
+      winnerName: winner?.name ?? "Nobody",
+      scores,
+    });
+    return true;
+  }
+  return false;
+}
+
 export function setupWebSocket(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -193,38 +212,26 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
         case "player_eliminated": {
           const room = getRoom(msg.roomCode);
-          if (!room) return;
+          if (!room || room.status !== "playing") return;
 
           const player = room.players.find((p) => p.id === msg.playerId);
-          if (player) player.eliminated = true;
+          // Idempotent — ignore if already eliminated or not found
+          if (!player || player.eliminated) return;
 
-          const activePlayers = room.players.filter((p) => !p.eliminated);
+          player.eliminated = true;
+          updateRoom(msg.roomCode, { players: room.players });
 
-          if (activePlayers.length <= 1) {
-            const winner = activePlayers[0] ?? room.players[0];
-            updateRoom(msg.roomCode, { status: "finished", players: room.players });
+          if (checkAndEndGame(msg.roomCode)) break;
 
-            const scores = room.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
-            broadcastAll(msg.roomCode, {
-              type: "game_over",
-              winnerId: winner?.id ?? null,
-              winnerName: winner?.name ?? "Nobody",
-              scores,
-            });
-          } else {
-            const nextPlayerId = getNextPlayer({ ...room, currentPlayerId: msg.playerId });
-            updateRoom(msg.roomCode, {
-              currentPlayerId: nextPlayerId,
-              players: room.players,
-            });
+          const nextPlayerId = getNextPlayer(room);
+          updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
 
-            broadcastAll(msg.roomCode, {
-              type: "player_eliminated",
-              playerId: msg.playerId,
-              nextPlayerId,
-              room: getRoom(msg.roomCode),
-            });
-          }
+          broadcastAll(msg.roomCode, {
+            type: "player_eliminated",
+            playerId: msg.playerId,
+            nextPlayerId,
+            room: getRoom(msg.roomCode),
+          });
           break;
         }
 
@@ -306,13 +313,48 @@ export function setupWebSocket(server: Server): WebSocketServer {
         if (sockets.size === 0) roomSockets.delete(roomCode);
       }
 
-      removePlayerFromRoom(roomCode, playerId);
       const room = getRoom(roomCode);
-      if (room) {
+      if (!room) {
+        logger.info({ roomCode, playerId }, "WS client disconnected (no room)");
+        return;
+      }
+
+      if (room.status === "playing") {
+        // During an active game: mark the player as eliminated rather than
+        // removing them — this prevents the active-player count from dropping
+        // and causing a premature game-over for the remaining players.
+        const player = room.players.find((p) => p.id === playerId);
+        if (player && !player.eliminated) {
+          player.eliminated = true;
+          updateRoom(roomCode, { players: room.players });
+
+          if (!checkAndEndGame(roomCode)) {
+            // Game continues — if it was this player's turn, advance to next
+            if (room.currentPlayerId === playerId) {
+              const nextPlayerId = getNextPlayer(room);
+              updateRoom(roomCode, { currentPlayerId: nextPlayerId });
+              broadcastAll(roomCode, {
+                type: "player_eliminated",
+                playerId,
+                nextPlayerId,
+                room: getRoom(roomCode),
+              });
+            } else {
+              broadcastAll(roomCode, {
+                type: "player_left",
+                playerId,
+                room: getRoom(roomCode),
+              });
+            }
+          }
+        }
+      } else {
+        // Lobby or finished: remove the player normally
+        removePlayerFromRoom(roomCode, playerId);
         broadcastAll(roomCode, {
           type: "player_left",
           playerId,
-          room,
+          room: getRoom(roomCode),
         });
       }
 

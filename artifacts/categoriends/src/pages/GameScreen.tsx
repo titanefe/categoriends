@@ -24,6 +24,7 @@ export default function GameScreen() {
   const [showCategoryPopup, setShowCategoryPopup] = useState(true);
 
   const eliminatedSentRef = useRef(false);
+  const isEliminatedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerPausedRef = useRef(true); // starts paused until popup dismissed
@@ -37,6 +38,7 @@ export default function GameScreen() {
 
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
   useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
+  useEffect(() => { isEliminatedRef.current = isEliminated; }, [isEliminated]);
 
   // Auto-dismiss category popup after 4 seconds
   useEffect(() => {
@@ -72,6 +74,11 @@ export default function GameScreen() {
 
     // Keep paused until popup dismissed on first load; resume immediately on subsequent turns
     timerPausedRef.current = !hasShownPopupRef.current;
+
+    // Only reset the sent-flag for non-eliminated players
+    if (!isEliminatedRef.current) {
+      eliminatedSentRef.current = false;
+    }
 
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -166,6 +173,7 @@ export default function GameScreen() {
       return;
     }
     if (eliminatedSentRef.current) return;
+    if (isEliminatedRef.current) return; // already eliminated — don't re-send
     if (isMyTurnRef.current && ws) {
       eliminatedSentRef.current = true;
       ws.send(JSON.stringify({
