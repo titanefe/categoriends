@@ -26,7 +26,8 @@ type WSMessage =
   | { type: "player_eliminated"; roomCode: string; playerId: string }
   | { type: "next_turn"; roomCode: string }
   | { type: "game_over_request"; roomCode: string; winnerId: string; winnerName: string }
-  | { type: "reset_room"; roomCode: string };
+  | { type: "reset_room"; roomCode: string }
+  | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number };
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
@@ -272,6 +273,22 @@ export function setupWebSocket(server: Server): WebSocketServer {
           });
           broadcastAll(msg.roomCode, {
             type: "room_reset",
+            room: getRoom(msg.roomCode),
+          });
+          break;
+        }
+
+        case "update_room_settings": {
+          const room = getRoom(msg.roomCode);
+          if (!room) return;
+          if (room.hostId !== msg.playerId) return;
+          if (room.status !== "waiting") return;
+          updateRoom(msg.roomCode, {
+            category: msg.category,
+            timeSeconds: msg.timeSeconds,
+          });
+          broadcastAll(msg.roomCode, {
+            type: "room_settings_updated",
             room: getRoom(msg.roomCode),
           });
           break;
