@@ -34,13 +34,15 @@ export default function GameScreen() {
   const isMyTurnRef = useRef(false);
   const hasShownPopupRef = useRef(false);
 
-  // Always-current refs so popstate / beforeunload callbacks are never stale
+  // Always-current refs so WS callbacks and popstate/beforeunload are never stale
   const wsRef = useRef(ws);
   const roomRef = useRef(room);
   const playerRef = useRef(player);
+  const gameStateRef = useRef(gameState);
   useEffect(() => { wsRef.current = ws; }, [ws]);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { playerRef.current = player; }, [player]);
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   const isSolo = room?.mode === "solo";
   const isMyTurn = gameState?.currentPlayerId === player?.id;
@@ -164,6 +166,9 @@ export default function GameScreen() {
   }, [gameState?.currentPlayerId, gameState?.round]);
 
   // WebSocket messages (multiplayer)
+  // Dependency array is [ws, isSolo] ONLY — all mutable values are read from refs.
+  // This prevents the listener from being torn down on every game state change,
+  // which would create a window where `game_over` can be silently dropped.
   useEffect(() => {
     if (!ws || isSolo) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -171,24 +176,26 @@ export default function GameScreen() {
         const data = JSON.parse(evt.data);
         if (data.type === "turn_passed" && data.room) {
           setRoom(data.room);
+          const gs = gameStateRef.current;
           setGameState({
-            subcategory: gameState?.subcategory ?? "",
+            subcategory: gs?.subcategory ?? "",
             currentPlayerId: data.nextPlayerId,
-            acceptedAnswers: data.room.acceptedAnswers ?? gameState?.acceptedAnswers ?? [],
-            timeLeft: timerMax,
-            round: (gameState?.round ?? 1) + 1,
+            acceptedAnswers: data.room.acceptedAnswers ?? gs?.acceptedAnswers ?? [],
+            timeLeft: roomRef.current?.timeSeconds ?? 15,
+            round: (gs?.round ?? 1) + 1,
             turnStartedAt: data.turnStartedAt ?? Date.now(),
           });
         }
         if (data.type === "player_eliminated" && data.room) {
           setRoom(data.room);
           if (data.nextPlayerId) {
+            const gs = gameStateRef.current;
             setGameState({
-              subcategory: gameState?.subcategory ?? "",
+              subcategory: gs?.subcategory ?? "",
               currentPlayerId: data.nextPlayerId,
-              acceptedAnswers: gameState?.acceptedAnswers ?? [],
-              timeLeft: timerMax,
-              round: (gameState?.round ?? 1) + 1,
+              acceptedAnswers: gs?.acceptedAnswers ?? [],
+              timeLeft: roomRef.current?.timeSeconds ?? 15,
+              round: (gs?.round ?? 1) + 1,
               turnStartedAt: data.turnStartedAt ?? Date.now(),
             });
           }
@@ -199,12 +206,12 @@ export default function GameScreen() {
           setTimeout(() => setLocation("/result"), 2200);
         }
         if (data.type === "answer_result") {
-          if (data.playerId === player?.id) {
+          if (data.playerId === playerRef.current?.id) {
             // Own answer confirmed by server — just unpause; animations already fired locally
             timerPausedRef.current = false;
           } else {
             // Another player's answer — show a brief toast
-            const name = room?.players?.find((p) => p.id === data.playerId)?.name ?? "?";
+            const name = roomRef.current?.players?.find((p) => p.id === data.playerId)?.name ?? "?";
             if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
             setLiveToast({ playerName: name, answer: data.answer, valid: data.valid });
             liveToastTimerRef.current = setTimeout(() => setLiveToast(null), 2200);
@@ -214,7 +221,7 @@ export default function GameScreen() {
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, isSolo, gameState, setRoom, setGameState, setLocation, timerMax]);
+  }, [ws, isSolo]);
 
   function triggerAccepted() {
     setAnimState("accepted");
