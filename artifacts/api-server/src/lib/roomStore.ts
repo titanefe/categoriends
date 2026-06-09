@@ -104,6 +104,20 @@ export function getNextPlayer(room: Room): string | null {
   });
   if (activePlayers.length === 0) return null;
   if (!room.currentPlayerId) return activePlayers[0];
+
   const idx = activePlayers.indexOf(room.currentPlayerId);
-  return activePlayers[(idx + 1) % activePlayers.length];
+  if (idx !== -1) {
+    // Current player is still active — advance normally
+    return activePlayers[(idx + 1) % activePlayers.length];
+  }
+
+  // Current player was just eliminated — find their slot in the full turn order
+  // and pick the next active player after that position
+  const fullIdx = room.turnOrder.indexOf(room.currentPlayerId);
+  if (fullIdx === -1) return activePlayers[0];
+  for (let i = 1; i <= room.turnOrder.length; i++) {
+    const candidate = room.turnOrder[(fullIdx + i) % room.turnOrder.length];
+    if (activePlayers.includes(candidate)) return candidate;
+  }
+  return activePlayers[0];
 }

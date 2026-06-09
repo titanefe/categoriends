@@ -25,6 +25,8 @@ export default function JoinRoom() {
           setError(
             data.message === "wrong_language"
               ? t("join.error.wrongLanguage")
+              : data.message === "room_full"
+              ? t("join.error.roomFull")
               : data.message || "Failed to join room."
           );
           setJoining(false);

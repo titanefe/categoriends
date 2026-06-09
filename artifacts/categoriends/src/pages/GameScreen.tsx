@@ -22,6 +22,8 @@ export default function GameScreen() {
   const [verifying, setVerifying] = useState(false);
   const [gameOverOverlay, setGameOverOverlay] = useState<GameOverOverlay>(null);
   const [showCategoryPopup, setShowCategoryPopup] = useState(true);
+  const [liveToast, setLiveToast] = useState<{ playerName: string; answer: string; valid: boolean } | null>(null);
+  const liveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const eliminatedSentRef = useRef(false);
   const isEliminatedRef = useRef(false);
@@ -145,11 +147,15 @@ export default function GameScreen() {
           setTimeout(() => setLocation("/result"), 2200);
         }
         if (data.type === "answer_result") {
-          timerPausedRef.current = false;
-          if (data.valid) {
-            triggerAccepted();
+          if (data.playerId === player?.id) {
+            // Own answer confirmed by server — just unpause; animations already fired locally
+            timerPausedRef.current = false;
           } else {
-            triggerRejected(data.reason);
+            // Another player's answer — show a brief toast
+            const name = room?.players?.find((p) => p.id === data.playerId)?.name ?? "?";
+            if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
+            setLiveToast({ playerName: name, answer: data.answer, valid: data.valid });
+            liveToastTimerRef.current = setTimeout(() => setLiveToast(null), 2200);
           }
         }
       } catch {}
@@ -241,6 +247,17 @@ export default function GameScreen() {
           } else {
             triggerRejected(result.reason);
             setAnswer("");
+            // Broadcast invalid answer so other players can see it as a toast
+            if (!isSolo && ws && room) {
+              ws.send(JSON.stringify({
+                type: "answer_submitted",
+                roomCode: room.code,
+                playerId: player!.id,
+                answer: trimmed,
+                valid: false,
+                reason: result.reason,
+              }));
+            }
           }
         },
         onError: () => {
@@ -292,7 +309,22 @@ export default function GameScreen() {
   const myTurn = gameState.currentPlayerId === player?.id;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col select-none">
+    <div className="min-h-[100dvh] bg-background flex flex-col select-none">
+      {/* Live toast — shows another player's answer result briefly */}
+      {liveToast && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-xl text-sm font-mono border shadow-lg transition-all pointer-events-none ${
+          liveToast.valid
+            ? "bg-emerald-950 border-emerald-500/60 text-emerald-300"
+            : "bg-red-950 border-red-500/60 text-red-300"
+        }`}>
+          <span className="font-semibold">{liveToast.playerName}</span>
+          {": "}
+          <span className="italic">"{liveToast.answer}"</span>
+          {" "}
+          {liveToast.valid ? "✓" : "✗"}
+        </div>
+      )}
+
       {/* Category popup overlay — shown at game start */}
       {showCategoryPopup && (
         <div

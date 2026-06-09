@@ -80,6 +80,7 @@ TEMEL KURALLAR:
 - Yanlış yazılmış bir versiyon kabul edildiyse, doğru yazılmış versiyonu da REDDET.
 - Doğru yazılmış versiyon kabul edildiyse, yanlış yazılmış versiyonu da REDDET.
 - Bir gerçek dünya nesnesinin yalnızca ilk gönderilen versiyonu sayılır.
+- ÖNEMLİ: Sadece benzer görünen veya ses çıkaran isimler, farklı gerçek dünya nesneleriyse ASLA tekrar sayılmaz. "Afganistan" ve "Kazakistan" tamamen farklı ülkelerdir — asla tekrar sayılamaz. Bu kuralı tüm özel isimlere uygula.
 
 Yanıtını SADECE şu JSON formatında ver: {"valid": true/false, "reason": "tek cümle açıklama"}
 Başka hiçbir şey yazma.`
@@ -95,6 +96,7 @@ KEY RULES:
 - If a misspelled version was already accepted, reject the correctly spelled version too.
 - If the correct version was already accepted, reject any misspelled version too.
 - Only the FIRST submitted variant of any real-world thing counts.
+- CRITICAL: Names that merely look or sound similar are NOT duplicates if they are different real-world things. "Afghanistan" and "Kazakhstan" are completely different countries — never mark them as duplicates. Apply this rule to all proper nouns.
 
 Respond ONLY in this JSON format: {"valid": true/false, "reason": "one sentence explanation"}
 Write nothing else.`;

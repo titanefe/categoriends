@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
@@ -6,6 +7,7 @@ export default function Home() {
   const { t, lang, setLang } = useTranslation();
   const { setRoom } = useGame();
   const [, setLocation] = useLocation();
+  const [showHowTo, setShowHowTo] = useState(false);
 
   function handleSolo() {
     setRoom(null);
@@ -22,6 +24,13 @@ export default function Home() {
     setLocation("/room/join");
   }
 
+  const rules = [
+    { title: t("howto.rule1title"), body: t("howto.rule1") },
+    { title: t("howto.rule2title"), body: t("howto.rule2") },
+    { title: t("howto.rule3title"), body: t("howto.rule3") },
+    { title: t("howto.rule4title"), body: t("howto.rule4") },
+  ];
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 relative overflow-hidden">
       {/* Background glow */}
@@ -31,14 +40,15 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
-        {/* Language toggle */}
-        <div className="absolute top-0 right-0" style={{ top: "-3rem" }}>
+        {/* Language toggle — prominent */}
+        <div className="w-full flex justify-end">
           <button
             data-testid="lang-toggle"
             onClick={() => setLang(lang === "en" ? "tr" : "en")}
-            className="text-xs font-mono tracking-widest px-3 py-1.5 rounded-full border border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/50 bg-primary/10 text-primary font-semibold text-sm hover:bg-primary/20 hover:border-primary active:scale-[0.98] transition-all"
           >
-            {lang === "en" ? "TR" : "EN"}
+            <span className="text-base">{lang === "en" ? "🇹🇷" : "🇬🇧"}</span>
+            <span>{lang === "en" ? "Türkçe" : "English"}</span>
           </button>
         </div>
 
@@ -81,13 +91,62 @@ export default function Home() {
           >
             {t("home.joinRoom")}
           </button>
+
+          <button
+            onClick={() => setShowHowTo(true)}
+            className="w-full py-3 rounded-xl font-medium text-sm border border-border text-muted-foreground hover:border-primary/50 hover:text-primary active:scale-[0.98] transition-all"
+          >
+            {t("home.howToPlay")}
+          </button>
         </div>
 
-        {/* Footer */}
-        <p className="text-muted-foreground/40 text-xs font-mono mt-4">
-          v1.0 &mdash; real-time word battles
-        </p>
+        {/* Footer — contact */}
+        <div className="text-center">
+          <p className="text-muted-foreground/40 text-xs font-mono">
+            v1.0 &mdash; real-time word battles
+          </p>
+          <a
+            href="mailto:mefecetinkaya44@gmail.com"
+            className="text-muted-foreground/50 text-xs font-mono hover:text-primary transition-colors mt-1 block"
+          >
+            {t("home.contact")}: mefecetinkaya44@gmail.com
+          </a>
+        </div>
       </div>
+
+      {/* How to Play modal */}
+      {showHowTo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowHowTo(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold mb-5 text-foreground">{t("howto.title")}</h2>
+            <div className="flex flex-col gap-4 mb-6">
+              {rules.map((r, i) => (
+                <div key={i} className="flex gap-3">
+                  <span className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-0.5">{r.title}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{r.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowHowTo(false)}
+              className="w-full py-3 rounded-xl font-semibold text-sm bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all"
+            >
+              {t("howto.close")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

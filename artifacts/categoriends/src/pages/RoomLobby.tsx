@@ -9,6 +9,7 @@ const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 
 export default function RoomLobby() {
   const { t } = useTranslation();
+  const [kickedMsg, setKickedMsg] = useState("");
   const { code } = useParams<{ code: string }>();
   const { room, setRoom, player, ws, setGameState } = useGame();
   const [, setLocation] = useLocation();
@@ -34,9 +35,14 @@ export default function RoomLobby() {
         const data = JSON.parse(evt.data);
         if (data.type === "player_joined" && data.room) setRoom(data.room as Room);
         if (data.type === "player_left" && data.room) setRoom(data.room as Room);
+        if (data.type === "player_kicked") {
+          setKickedMsg(t("lobby.kicked"));
+          setTimeout(() => setLocation("/"), 1800);
+        }
         if (data.type === "room_reset" && data.room) {
           setRoom(data.room as Room);
           setGameState(null);
+          setLocation(`/room/${data.room.code}`);
         }
         if (data.type === "room_settings_updated" && data.room) {
           setRoom(data.room as Room);
@@ -59,6 +65,16 @@ export default function RoomLobby() {
 
   const isHost = player?.id === room?.hostId;
   const categories = room?.language === "tr" ? MAIN_CATEGORIES_TR : MAIN_CATEGORIES_EN;
+
+  function handleKick(targetId: string) {
+    if (!ws || !room || !player) return;
+    ws.send(JSON.stringify({
+      type: "kick_player",
+      roomCode: room.code,
+      hostId: player.id,
+      targetId,
+    }));
+  }
 
   function sendSettings() {
     if (!room || !ws || !player) return;
@@ -100,6 +116,14 @@ export default function RoomLobby() {
           }));
         },
       }
+    );
+  }
+
+  if (kickedMsg) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <p className="text-destructive text-center font-mono text-sm">{kickedMsg}</p>
+      </div>
     );
   }
 
@@ -224,6 +248,15 @@ export default function RoomLobby() {
                 )}
                 {p.id === player?.id && p.id !== room.hostId && (
                   <span className="ml-auto text-xs text-muted-foreground font-mono">{t("lobby.you")}</span>
+                )}
+                {isHost && p.id !== player?.id && (
+                  <button
+                    onClick={() => handleKick(p.id)}
+                    className="ml-auto text-muted-foreground/50 hover:text-destructive transition-colors text-xs font-mono px-1"
+                    title={t("lobby.kick")}
+                  >
+                    ✕
+                  </button>
                 )}
               </div>
             ))}

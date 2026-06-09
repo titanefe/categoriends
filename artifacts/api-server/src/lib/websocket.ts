@@ -5,6 +5,7 @@ import {
   createRoom,
   getRoom,
   updateRoom,
+  deleteRoom,
   addPlayerToRoom,
   removePlayerFromRoom,
   getNextPlayer,
@@ -27,7 +28,8 @@ type WSMessage =
   | { type: "next_turn"; roomCode: string }
   | { type: "game_over_request"; roomCode: string; winnerId: string; winnerName: string }
   | { type: "reset_room"; roomCode: string }
-  | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number };
+  | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number }
+  | { type: "kick_player"; roomCode: string; hostId: string; targetId: string };
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
@@ -121,6 +123,10 @@ export function setupWebSocket(server: Server): WebSocketServer {
             sendToSocket(ws, { type: "error", message: "Game already started" });
             return;
           }
+          if (room.mode === "duel" && room.players.length >= 2) {
+            sendToSocket(ws, { type: "error", message: "room_full" });
+            return;
+          }
           if (msg.language && msg.language !== room.language) {
             sendToSocket(ws, { type: "error", message: "wrong_language" });
             return;
@@ -160,7 +166,12 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const room = getRoom(msg.roomCode);
           if (!room) return;
 
-          const turnOrder = room.players.map((p) => p.id);
+          // Shuffle player order so the first player is random
+          const turnOrder = [...room.players.map((p) => p.id)];
+          for (let i = turnOrder.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [turnOrder[i], turnOrder[j]] = [turnOrder[j], turnOrder[i]];
+          }
           const firstPlayerId = turnOrder[0] ?? null;
 
           updateRoom(msg.roomCode, {
@@ -268,22 +279,58 @@ export function setupWebSocket(server: Server): WebSocketServer {
         }
 
         case "reset_room": {
-          const room = getRoom(msg.roomCode);
-          if (!room) return;
-          const resetPlayers = room.players.map((p) => ({
-            ...p,
-            score: 0,
-            eliminated: false,
-          }));
-          updateRoom(msg.roomCode, {
-            status: "waiting",
-            acceptedAnswers: [],
-            currentPlayerId: null,
-            turnOrder: [],
-            players: resetPlayers,
-          });
-          broadcastAll(msg.roomCode, {
+          const oldRoom = getRoom(msg.roomCode);
+          if (!oldRoom) return;
+
+          // Create a brand-new room so everything is clean (fixes custom-category
+          // sticking around and 2nd-game crashes from stale state)
+          const newRoom = createRoom(
+            oldRoom.hostId,
+            oldRoom.mode,
+            oldRoom.language,
+            oldRoom.category,
+            oldRoom.timeSeconds,
+          );
+          for (const p of oldRoom.players) {
+            addPlayerToRoom(newRoom.code, { ...p, score: 0, eliminated: false });
+          }
+
+          // Move all socket references from the old room to the new one
+          const oldSockets = roomSockets.get(msg.roomCode);
+          if (oldSockets) {
+            roomSockets.set(newRoom.code, new Set(oldSockets));
+            roomSockets.delete(msg.roomCode);
+            for (const s of oldSockets) {
+              s.roomCode = newRoom.code;
+            }
+          }
+
+          deleteRoom(msg.roomCode);
+
+          broadcastAll(newRoom.code, {
             type: "room_reset",
+            room: getRoom(newRoom.code),
+          });
+          break;
+        }
+
+        case "kick_player": {
+          const room = getRoom(msg.roomCode);
+          if (!room || room.hostId !== msg.hostId || room.status !== "waiting") return;
+          // Notify the kicked player before removing them
+          const sockets = roomSockets.get(msg.roomCode);
+          if (sockets) {
+            for (const s of sockets) {
+              if (s.playerId === msg.targetId) {
+                sendToSocket(s, { type: "player_kicked" });
+                break;
+              }
+            }
+          }
+          removePlayerFromRoom(msg.roomCode, msg.targetId);
+          broadcastAll(msg.roomCode, {
+            type: "player_left",
+            playerId: msg.targetId,
             room: getRoom(msg.roomCode),
           });
           break;
