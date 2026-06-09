@@ -29,7 +29,8 @@ type WSMessage =
   | { type: "game_over_request"; roomCode: string; winnerId: string; winnerName: string }
   | { type: "reset_room"; roomCode: string }
   | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number }
-  | { type: "kick_player"; roomCode: string; hostId: string; targetId: string };
+  | { type: "kick_player"; roomCode: string; hostId: string; targetId: string }
+  | { type: "leave_game"; roomCode: string; playerId: string };
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
@@ -333,6 +334,37 @@ export function setupWebSocket(server: Server): WebSocketServer {
             playerId: msg.targetId,
             room: getRoom(msg.roomCode),
           });
+          break;
+        }
+
+        case "leave_game": {
+          const room = getRoom(msg.roomCode);
+          if (!room || room.status !== "playing") return;
+          const leavingPlayer = room.players.find((p) => p.id === msg.playerId);
+          if (!leavingPlayer || leavingPlayer.eliminated) return;
+
+          leavingPlayer.eliminated = true;
+          updateRoom(msg.roomCode, { players: room.players });
+
+          if (!checkAndEndGame(msg.roomCode)) {
+            if (room.currentPlayerId === msg.playerId) {
+              const nextPlayerId = getNextPlayer(room);
+              updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
+              broadcastAll(msg.roomCode, {
+                type: "player_eliminated",
+                playerId: msg.playerId,
+                nextPlayerId,
+                room: getRoom(msg.roomCode),
+              });
+            } else {
+              broadcastAll(msg.roomCode, {
+                type: "player_eliminated",
+                playerId: msg.playerId,
+                nextPlayerId: room.currentPlayerId,
+                room: getRoom(msg.roomCode),
+              });
+            }
+          }
           break;
         }
 

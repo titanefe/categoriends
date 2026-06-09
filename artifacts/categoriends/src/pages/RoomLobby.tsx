@@ -28,6 +28,20 @@ export default function RoomLobby() {
     }
   }, [room?.code]);
 
+  // If someone navigates to the lobby while a game is in progress, treat them as
+  // having left. Send leave_game so other players aren't stuck, then go home.
+  useEffect(() => {
+    if (!room || !player || !ws) return;
+    if (room.status !== "playing") return;
+    const inRoom = room.players.some((p) => p.id === player.id && !p.eliminated);
+    if (inRoom) {
+      try {
+        ws.send(JSON.stringify({ type: "leave_game", roomCode: room.code, playerId: player.id }));
+      } catch {}
+      setLocation("/");
+    }
+  }, [room?.status, player?.id]);
+
   useEffect(() => {
     if (!ws) return;
     const handleMsg = (evt: MessageEvent) => {

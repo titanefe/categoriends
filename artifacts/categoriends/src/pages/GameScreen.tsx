@@ -51,6 +51,20 @@ export default function GameScreen() {
     return () => clearTimeout(timer);
   }, [gameState, setLocation]);
 
+  // When the player navigates away mid-game (back button, route change, etc.),
+  // tell the server to eliminate them so the game continues cleanly for others.
+  useEffect(() => {
+    return () => {
+      if (!isSolo && ws && room && player && !isEliminatedRef.current && room.status === "playing") {
+        try {
+          ws.send(JSON.stringify({ type: "leave_game", roomCode: room.code, playerId: player.id }));
+        } catch {}
+      }
+    };
+    // run only once on mount — capture room/ws/player via refs if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-dismiss category popup after 4 seconds
   useEffect(() => {
     if (!showCategoryPopup) return;
