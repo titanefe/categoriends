@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type Room } from "@/context/GameContext";
@@ -20,6 +20,27 @@ export default function RoomLobby() {
   const [settingsCustom, setSettingsCustom] = useState("");
   const [settingsTime, setSettingsTime] = useState(15);
 
+  // Always-current refs so popstate / beforeunload callbacks are never stale
+  const wsRef = useRef(ws);
+  const roomRef = useRef(room);
+  const playerRef = useRef(player);
+  useEffect(() => { wsRef.current = ws; }, [ws]);
+  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { playerRef.current = player; }, [player]);
+
+  const leftRoomSentRef = useRef(false);
+
+  const sendLeaveRoom = useCallback(() => {
+    if (leftRoomSentRef.current) return;
+    const w = wsRef.current;
+    const r = roomRef.current;
+    const p = playerRef.current;
+    if (!w || !r || !p) return;
+    if (r.status !== "waiting") return;
+    leftRoomSentRef.current = true;
+    try { w.send(JSON.stringify({ type: "leave_room", roomCode: r.code, playerId: p.id })); } catch {}
+  }, []);
+
   useEffect(() => {
     if (room) {
       setSettingsCategory(room.category);
@@ -28,16 +49,26 @@ export default function RoomLobby() {
     }
   }, [room?.code]);
 
-  // When player navigates away from the lobby (back button, home, etc.),
-  // remove them from the room so others don't see a ghost player.
+  // Intercept browser back button on mobile
   useEffect(() => {
-    return () => {
-      if (!ws || !room || !player) return;
-      if (room.status !== "waiting") return;
-      try {
-        ws.send(JSON.stringify({ type: "leave_room", roomCode: room.code, playerId: player.id }));
-      } catch {}
+    history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      sendLeaveRoom();
+      setLocation("/");
     };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [sendLeaveRoom, setLocation]);
+
+  // Page close / refresh
+  useEffect(() => {
+    window.addEventListener("beforeunload", sendLeaveRoom);
+    return () => window.removeEventListener("beforeunload", sendLeaveRoom);
+  }, [sendLeaveRoom]);
+
+  // Component unmount (programmatic navigation)
+  useEffect(() => {
+    return () => { sendLeaveRoom(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

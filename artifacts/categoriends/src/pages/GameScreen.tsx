@@ -34,6 +34,14 @@ export default function GameScreen() {
   const isMyTurnRef = useRef(false);
   const hasShownPopupRef = useRef(false);
 
+  // Always-current refs so popstate / beforeunload callbacks are never stale
+  const wsRef = useRef(ws);
+  const roomRef = useRef(room);
+  const playerRef = useRef(player);
+  useEffect(() => { wsRef.current = ws; }, [ws]);
+  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { playerRef.current = player; }, [player]);
+
   const isSolo = room?.mode === "solo";
   const isMyTurn = gameState?.currentPlayerId === player?.id;
   const isEliminated = room?.players?.find((p) => p.id === player?.id)?.eliminated ?? false;
@@ -41,6 +49,20 @@ export default function GameScreen() {
   useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
   useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
   useEffect(() => { isEliminatedRef.current = isEliminated; }, [isEliminated]);
+
+  // Idempotent helper — reads from refs so it's safe to call from any event
+  const sendLeaveGame = useCallback(() => {
+    if (eliminatedSentRef.current) return;
+    const w = wsRef.current;
+    const r = roomRef.current;
+    const p = playerRef.current;
+    if (!w || !r || !p) return;
+    if (r.mode === "solo") return;
+    if (isEliminatedRef.current) return;
+    if (r.status !== "playing") return;
+    eliminatedSentRef.current = true;
+    try { w.send(JSON.stringify({ type: "leave_game", roomCode: r.code, playerId: p.id })); } catch {}
+  }, []);
 
   // If state was wiped by a page refresh, redirect home after a short grace period
   useEffect(() => {
@@ -51,17 +73,26 @@ export default function GameScreen() {
     return () => clearTimeout(timer);
   }, [gameState, setLocation]);
 
-  // When the player navigates away mid-game (back button, route change, etc.),
-  // tell the server to eliminate them so the game continues cleanly for others.
+  // Intercept browser back button — push a dummy state on mount so we get a popstate event
   useEffect(() => {
-    return () => {
-      if (!isSolo && ws && room && player && !isEliminatedRef.current && room.status === "playing") {
-        try {
-          ws.send(JSON.stringify({ type: "leave_game", roomCode: room.code, playerId: player.id }));
-        } catch {}
-      }
+    history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      sendLeaveGame();
+      setLocation("/");
     };
-    // run only once on mount — capture room/ws/player via refs if needed
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [sendLeaveGame, setLocation]);
+
+  // Page close / refresh
+  useEffect(() => {
+    window.addEventListener("beforeunload", sendLeaveGame);
+    return () => window.removeEventListener("beforeunload", sendLeaveGame);
+  }, [sendLeaveGame]);
+
+  // Component unmount (React navigation without popstate, e.g. programmatic setLocation)
+  useEffect(() => {
+    return () => { sendLeaveGame(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
