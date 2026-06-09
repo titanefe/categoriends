@@ -35,6 +35,45 @@ type WSMessage =
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
+// Server-side per-room turn timers — auto-eliminates a ghost player if the
+// client never sends player_eliminated within the allowed turn window.
+const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearTurnTimer(roomCode: string): void {
+  const t = turnTimers.get(roomCode);
+  if (t !== undefined) { clearTimeout(t); turnTimers.delete(roomCode); }
+}
+
+function scheduleTurnTimeout(roomCode: string, playerId: string): void {
+  const room = getRoom(roomCode);
+  if (!room || room.status !== "playing") return;
+  const delayMs = (room.timeSeconds + 2) * 1000;
+  clearTurnTimer(roomCode);
+  const timer = setTimeout(() => {
+    turnTimers.delete(roomCode);
+    const r = getRoom(roomCode);
+    if (!r || r.status !== "playing") return;
+    if (r.currentPlayerId !== playerId) return; // turn already moved on
+    const p = r.players.find((pl) => pl.id === playerId);
+    if (!p || p.eliminated) return;
+    // Auto-eliminate the unresponsive player
+    p.eliminated = true;
+    updateRoom(roomCode, { players: r.players });
+    if (!checkAndEndGame(roomCode)) {
+      const next = getNextPlayer(r);
+      updateRoom(roomCode, { currentPlayerId: next });
+      broadcastAll(roomCode, {
+        type: "player_eliminated",
+        playerId,
+        nextPlayerId: next,
+        room: getRoom(roomCode),
+      });
+      if (next) scheduleTurnTimeout(roomCode, next);
+    }
+  }, delayMs);
+  turnTimers.set(roomCode, timer);
+}
+
 function broadcast(roomCode: string, message: object, exclude?: ExtWebSocket): void {
   const sockets = roomSockets.get(roomCode);
   if (!sockets) return;
@@ -190,6 +229,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             firstPlayerId,
             room: getRoom(msg.roomCode),
           });
+          if (firstPlayerId) scheduleTurnTimeout(msg.roomCode, firstPlayerId);
           break;
         }
 
@@ -206,6 +246,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           });
 
           if (msg.valid) {
+            clearTurnTimer(msg.roomCode);
             const answers = [...room.acceptedAnswers, msg.answer];
             const player = room.players.find((p) => p.id === msg.playerId);
             if (player) player.score += 1;
@@ -223,6 +264,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
               timeLeft: 10,
               room: getRoom(msg.roomCode),
             });
+            if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
           }
           break;
         }
@@ -235,6 +277,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           // Idempotent — ignore if already eliminated or not found
           if (!player || player.eliminated) return;
 
+          clearTurnTimer(msg.roomCode);
           player.eliminated = true;
           updateRoom(msg.roomCode, { players: room.players });
 
@@ -249,12 +292,14 @@ export function setupWebSocket(server: Server): WebSocketServer {
             nextPlayerId,
             room: getRoom(msg.roomCode),
           });
+          if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
           break;
         }
 
         case "next_turn": {
           const room = getRoom(msg.roomCode);
           if (!room) return;
+          clearTurnTimer(msg.roomCode);
           const nextPlayerId = getNextPlayer(room);
           updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
           broadcastAll(msg.roomCode, {
@@ -263,12 +308,14 @@ export function setupWebSocket(server: Server): WebSocketServer {
             timeLeft: 10,
             room: getRoom(msg.roomCode),
           });
+          if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
           break;
         }
 
         case "game_over_request": {
           const room = getRoom(msg.roomCode);
           if (!room) return;
+          clearTurnTimer(msg.roomCode);
           updateRoom(msg.roomCode, { status: "finished" });
           const scores = room.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
           broadcastAll(msg.roomCode, {
@@ -283,6 +330,8 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "reset_room": {
           const oldRoom = getRoom(msg.roomCode);
           if (!oldRoom) return;
+
+          clearTurnTimer(msg.roomCode);
 
           // Create a brand-new room so everything is clean (fixes custom-category
           // sticking around and 2nd-game crashes from stale state)
@@ -361,6 +410,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const leavingPlayer = room.players.find((p) => p.id === msg.playerId);
           if (!leavingPlayer || leavingPlayer.eliminated) return;
 
+          clearTurnTimer(msg.roomCode);
           leavingPlayer.eliminated = true;
           updateRoom(msg.roomCode, { players: room.players });
 
@@ -374,6 +424,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 nextPlayerId,
                 room: getRoom(msg.roomCode),
               });
+              if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
             } else {
               broadcastAll(msg.roomCode, {
                 type: "player_eliminated",
@@ -381,6 +432,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 nextPlayerId: room.currentPlayerId,
                 room: getRoom(msg.roomCode),
               });
+              if (room.currentPlayerId) scheduleTurnTimeout(msg.roomCode, room.currentPlayerId);
             }
           }
           break;
@@ -426,6 +478,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
         // and causing a premature game-over for the remaining players.
         const player = room.players.find((p) => p.id === playerId);
         if (player && !player.eliminated) {
+          clearTurnTimer(roomCode);
           player.eliminated = true;
           updateRoom(roomCode, { players: room.players });
 
@@ -440,12 +493,16 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 nextPlayerId,
                 room: getRoom(roomCode),
               });
+              if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
             } else {
               broadcastAll(roomCode, {
                 type: "player_left",
                 playerId,
                 room: getRoom(roomCode),
               });
+              // Timer for the current player is still running — reschedule to
+              // pick up any remaining time accurately
+              if (room.currentPlayerId) scheduleTurnTimeout(roomCode, room.currentPlayerId);
             }
           }
         }

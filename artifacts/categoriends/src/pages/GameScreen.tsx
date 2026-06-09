@@ -437,10 +437,13 @@ export default function GameScreen() {
         </div>
       </div>
 
-      {/* Players row (multiplayer) */}
+      {/* Players row (multiplayer) — ordered by turn order so left→right = turn flow */}
       {!isSolo && room?.players && (
         <div className="px-4 mb-3 flex gap-2 overflow-x-auto pb-1">
-          {room.players.map((p) => (
+          {(room.turnOrder.length > 0
+            ? room.turnOrder.map((id) => room.players.find((p) => p.id === id)).filter((p): p is NonNullable<typeof p> => p != null)
+            : room.players
+          ).map((p) => (
             <div
               key={p.id}
               data-testid={`status-player-${p.id}`}

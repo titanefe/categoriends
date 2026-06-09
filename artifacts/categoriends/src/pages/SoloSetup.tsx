@@ -37,7 +37,7 @@ export default function SoloSetup() {
       setRoom({
         code: "SOLO", mode: "solo", hostId: playerId,
         players: [{ id: playerId, name: playerName, score: 0, eliminated: false }],
-        status: "playing", subcategory, category, language: lang, timeSeconds,
+        status: "playing", subcategory, category, language: lang, timeSeconds, turnOrder: [],
       });
       setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: timeSeconds, round: 1 });
       setLocation("/game");
@@ -58,6 +58,7 @@ export default function SoloSetup() {
             category,
             language: lang,
             timeSeconds,
+            turnOrder: [],
           });
           setGameState({
             subcategory: result.subcategory,

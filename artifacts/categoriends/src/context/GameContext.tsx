@@ -20,6 +20,7 @@ export interface Room {
   category: string;
   language: Language;
   timeSeconds: number;
+  turnOrder: string[];
 }
 
 export interface GameState {
