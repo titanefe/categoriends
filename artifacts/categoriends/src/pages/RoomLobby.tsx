@@ -112,6 +112,7 @@ export default function RoomLobby() {
             acceptedAnswers: [],
             timeLeft: room?.timeSeconds ?? 15,
             round: 1,
+            turnStartedAt: data.turnStartedAt ?? Date.now(),
           });
           setLocation("/game");
         }

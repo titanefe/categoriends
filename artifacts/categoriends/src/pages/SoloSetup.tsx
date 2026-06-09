@@ -39,7 +39,7 @@ export default function SoloSetup() {
         players: [{ id: playerId, name: playerName, score: 0, eliminated: false }],
         status: "playing", subcategory, category, language: lang, timeSeconds, turnOrder: [],
       });
-      setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: timeSeconds, round: 1 });
+      setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: timeSeconds, round: 1, turnStartedAt: Date.now() });
       setLocation("/game");
       return;
     }
@@ -66,6 +66,7 @@ export default function SoloSetup() {
             acceptedAnswers: [],
             timeLeft: timeSeconds,
             round: 1,
+            turnStartedAt: Date.now(),
           });
           setLocation("/game");
         },

@@ -29,6 +29,7 @@ export interface GameState {
   acceptedAnswers: string[];
   timeLeft: number;
   round: number;
+  turnStartedAt: number;
 }
 
 export interface AnswerResult {

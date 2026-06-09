@@ -120,8 +120,13 @@ export default function GameScreen() {
     if (!gameState) return;
 
     const max = room?.timeSeconds ?? 15;
-    setTimeLeft(max);
-    timeLeftRef.current = max;
+    // Use server-anchored timestamp to stay in sync across all clients
+    const elapsed = gameState.turnStartedAt
+      ? Math.max(0, Math.floor((Date.now() - gameState.turnStartedAt) / 1000))
+      : 0;
+    const initial = Math.max(1, max - elapsed);
+    setTimeLeft(initial);
+    timeLeftRef.current = initial;
     eliminatedSentRef.current = false;
     setAnswer("");
     setAnimState("idle");
@@ -172,6 +177,7 @@ export default function GameScreen() {
             acceptedAnswers: data.room.acceptedAnswers ?? gameState?.acceptedAnswers ?? [],
             timeLeft: timerMax,
             round: (gameState?.round ?? 1) + 1,
+            turnStartedAt: data.turnStartedAt ?? Date.now(),
           });
         }
         if (data.type === "player_eliminated" && data.room) {
@@ -183,6 +189,7 @@ export default function GameScreen() {
               acceptedAnswers: gameState?.acceptedAnswers ?? [],
               timeLeft: timerMax,
               round: (gameState?.round ?? 1) + 1,
+              turnStartedAt: data.turnStartedAt ?? Date.now(),
             });
           }
         }
@@ -277,6 +284,7 @@ export default function GameScreen() {
                 acceptedAnswers: [...previousAnswers, trimmed],
                 timeLeft: timerMax,
                 round: (gameState?.round ?? 1) + 1,
+                turnStartedAt: Date.now(),
               });
             } else if (ws && room) {
               timerPausedRef.current = false;

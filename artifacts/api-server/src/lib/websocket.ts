@@ -62,10 +62,12 @@ function scheduleTurnTimeout(roomCode: string, playerId: string): void {
     if (!checkAndEndGame(roomCode)) {
       const next = getNextPlayer(r);
       updateRoom(roomCode, { currentPlayerId: next });
+      const ts = Date.now();
       broadcastAll(roomCode, {
         type: "player_eliminated",
         playerId,
         nextPlayerId: next,
+        turnStartedAt: ts,
         room: getRoom(roomCode),
       });
       if (next) scheduleTurnTimeout(roomCode, next);
@@ -227,6 +229,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             type: "game_started",
             subcategory: msg.subcategory,
             firstPlayerId,
+            turnStartedAt: Date.now(),
             room: getRoom(msg.roomCode),
           });
           if (firstPlayerId) scheduleTurnTimeout(msg.roomCode, firstPlayerId);
@@ -258,10 +261,11 @@ export function setupWebSocket(server: Server): WebSocketServer {
               players: room.players,
             });
 
+            const tsTurnPassed = Date.now();
             broadcastAll(msg.roomCode, {
               type: "turn_passed",
               nextPlayerId,
-              timeLeft: 10,
+              turnStartedAt: tsTurnPassed,
               room: getRoom(msg.roomCode),
             });
             if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
@@ -290,6 +294,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             type: "player_eliminated",
             playerId: msg.playerId,
             nextPlayerId,
+            turnStartedAt: Date.now(),
             room: getRoom(msg.roomCode),
           });
           if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
@@ -302,10 +307,11 @@ export function setupWebSocket(server: Server): WebSocketServer {
           clearTurnTimer(msg.roomCode);
           const nextPlayerId = getNextPlayer(room);
           updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
+          const tsNextTurn = Date.now();
           broadcastAll(msg.roomCode, {
             type: "turn_passed",
             nextPlayerId,
-            timeLeft: 10,
+            turnStartedAt: tsNextTurn,
             room: getRoom(msg.roomCode),
           });
           if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
@@ -415,6 +421,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           updateRoom(msg.roomCode, { players: room.players });
 
           if (!checkAndEndGame(msg.roomCode)) {
+            const tsLeave = Date.now();
             if (room.currentPlayerId === msg.playerId) {
               const nextPlayerId = getNextPlayer(room);
               updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
@@ -422,6 +429,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 type: "player_eliminated",
                 playerId: msg.playerId,
                 nextPlayerId,
+                turnStartedAt: tsLeave,
                 room: getRoom(msg.roomCode),
               });
               if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
@@ -430,6 +438,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 type: "player_eliminated",
                 playerId: msg.playerId,
                 nextPlayerId: room.currentPlayerId,
+                turnStartedAt: tsLeave,
                 room: getRoom(msg.roomCode),
               });
               if (room.currentPlayerId) scheduleTurnTimeout(msg.roomCode, room.currentPlayerId);
@@ -484,6 +493,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           if (!checkAndEndGame(roomCode)) {
             // Game continues — if it was this player's turn, advance to next
+            const tsClose = Date.now();
             if (room.currentPlayerId === playerId) {
               const nextPlayerId = getNextPlayer(room);
               updateRoom(roomCode, { currentPlayerId: nextPlayerId });
@@ -491,6 +501,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 type: "player_eliminated",
                 playerId,
                 nextPlayerId,
+                turnStartedAt: tsClose,
                 room: getRoom(roomCode),
               });
               if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
