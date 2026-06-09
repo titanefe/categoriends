@@ -65,10 +65,10 @@ export default function GameScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-dismiss category popup after 4 seconds
+  // Auto-dismiss category popup after 3 seconds
   useEffect(() => {
     if (!showCategoryPopup) return;
-    const timer = setTimeout(() => dismissPopup(), 4000);
+    const timer = setTimeout(() => dismissPopup(), 3000);
     return () => clearTimeout(timer);
   }, [showCategoryPopup]);
 
@@ -352,13 +352,7 @@ export default function GameScreen() {
             <h2 className="text-3xl font-bold text-primary neon-text mb-6" style={{ fontFamily: "'Space Mono', monospace" }}>
               {gameState.subcategory}
             </h2>
-            <button
-              onClick={dismissPopup}
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:opacity-90 transition-all"
-            >
-              {t("game.popupStart")}
-            </button>
-            <p className="text-xs text-muted-foreground font-mono mt-3">
+            <p className="text-xs text-muted-foreground font-mono">
               {t("game.popupAutoDismiss")}
             </p>
           </div>
