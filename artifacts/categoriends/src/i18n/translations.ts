@@ -223,6 +223,10 @@ export function useTranslation() {
 
   useEffect(() => {
     localStorage.setItem("categoriends_lang", lang);
+    document.documentElement.lang = lang;
+    document.title = lang === "tr"
+      ? "Categoriends - Online Kategori Oyunu & Kelime Yarışması"
+      : "Categoriends - Online Category Game & Words Trivia";
   }, [lang]);
 
   const t = (key: string): string => {

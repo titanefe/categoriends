@@ -3,15 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>Categoriends</title>
-    <meta name="description" content="Categoriends — built on Replit. Update this description to reflect the app." />
+
+    <!-- Dynamic title/lang before React hydrates — bots & first paint get the right value -->
+    <script>
+      (function () {
+        var lang = localStorage.getItem("categoriends_lang") || "en";
+        var titles = {
+          en: "Categoriends - Online Category Game & Words Trivia",
+          tr: "Categoriends - Online Kategori Oyunu & Kelime Yarışması"
+        };
+        document.title = titles[lang] || titles.en;
+        document.documentElement.lang = lang;
+      })();
+    </script>
+
+    <meta name="description" content="Play Categoriends — the real-time multiplayer category word game. Name things before the timer runs out. Solo, 1v1 Duel and Party modes available." />
+    <meta name="keywords" content="category game, word game, multiplayer, trivia, party game, online game, kelime oyunu, kategori oyunu, çok oyunculu" />
     <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="Categoriends" />
-    <meta property="og:description" content="Categoriends — built on Replit. Update this description to reflect the app." />
+    <link rel="canonical" href="https://categoriends.replit.app/" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Categoriends - Online Category Game & Words Trivia" />
+    <meta property="og:description" content="Real-time multiplayer category word game. Name things before the timer runs out. Play Solo, 1v1 Duel or Party mode!" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://categoriends.replit.app/" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="tr_TR" />
+
+    <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Categoriends" />
-    <meta name="twitter:description" content="Categoriends — built on Replit. Update this description to reflect the app." />
+    <meta name="twitter:title" content="Categoriends - Online Category Game & Words Trivia" />
+    <meta name="twitter:description" content="Real-time multiplayer category word game. Name things before the timer runs out!" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
