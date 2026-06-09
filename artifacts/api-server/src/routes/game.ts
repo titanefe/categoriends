@@ -15,28 +15,50 @@ router.post("/game/generate-subcategory", async (req, res): Promise<void> => {
 
   const { category, language } = parsed.data;
 
-  // If it's a predefined category, pick randomly from the large pool — no AI needed
+  // Build a pool of examples for the AI (predefined or custom)
   const key = CATEGORY_TO_KEY[category];
+  let examples: string[] = [];
   if (key) {
     const pool = SUBCATEGORY_POOLS[key];
     const options = language === "tr" ? pool.tr : pool.en;
-    const subcategory = options[Math.floor(Math.random() * options.length)];
-    res.json({ subcategory });
-    return;
+    // Shuffle and pick 5 random examples to show the AI
+    const shuffled = [...options].sort(() => Math.random() - 0.5);
+    examples = shuffled.slice(0, 5);
   }
 
-  // Custom category: ask AI to generate a fitting sub-category
   const systemPrompt =
     language === "tr"
-      ? `Sen bir kelime oyunu asistanısın. Verilen kategoriye uygun, GENIŞ ve eğlenceli bir alt kategori üret.
-KURALLAR: Alt kategori kısa (2-4 kelime) ve basit olmalı. Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı. Sadece alt kategoriyi yaz, başka hiçbir şey yazma.`
+      ? `Sen bir kelime oyunu asistanısın. Verilen kategoriye uygun, GENİŞ ve eğlenceli bir alt kategori üret.
+
+KURALLAR:
+- Alt kategori kısa (2-4 kelime) ve basit olmalı.
+- Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı.
+- OYNAKANABİLİR olmalı: oyuncuların alt kategoriyle ilgili şeyler DÜŞÜNÜP YAZABİLECEĞİ bir konu olmalı.
+- Aşağıdaki örneklerden BİRİNİ de verebilir, veya bunlara benzeyen tamamen YENİ bir alt kategori üretebilirsin.
+- Sadece alt kategoriyi yaz, başka hiçbir şey yazma.`
       : `You are a word game assistant. Generate a BROAD, fun sub-category for the given category.
-RULES: Keep it short (2-4 words) and simple. Must be broad enough that players can easily name 5-10 examples. Output only the sub-category name, nothing else.`;
+
+RULES:
+- Keep it short (2-4 words) and simple.
+- Must be broad enough that players can easily name 5-10 examples.
+- Must be PLAYABLE: players must be able to think of and write things related to this topic.
+- You may return ONE of the examples below, or generate a completely NEW sub-category inspired by them.
+- Output ONLY the sub-category name, nothing else.`;
 
   const userPrompt =
     language === "tr"
-      ? `Kategori: "${category}". Geniş ve basit bir alt kategori üret.`
-      : `Category: "${category}". Generate a broad, simple sub-category.`;
+      ? `Kategori: "${category}"
+
+Örnek alt kategoriler (bunlardan biri veya bunlara benzer yeni biri):
+${examples.map((e, i) => `${i + 1}. ${e}`).join("\n")}
+
+Yukarıdaki örneklerden biri veya bunlara benzeyen basit, geniş ve oynanabilir bir alt kategori üret.`
+      : `Category: "${category}"
+
+Example sub-categories (return one of these or a new one inspired by them):
+${examples.map((e, i) => `${i + 1}. ${e}`).join("\n")}
+
+Generate a broad, simple, and playable sub-category.`;
 
   try {
     const completion = await openai.chat.completions.create({
