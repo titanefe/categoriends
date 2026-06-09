@@ -15,55 +15,60 @@ router.post("/game/generate-subcategory", async (req, res): Promise<void> => {
 
   const { category, language } = parsed.data;
 
-  // Build a pool of examples for the AI (predefined or custom)
   const key = CATEGORY_TO_KEY[category];
-  let examples: string[] = [];
-  if (key) {
-    const pool = SUBCATEGORY_POOLS[key];
-    const options = language === "tr" ? pool.tr : pool.en;
-    // Shuffle and pick 5 random examples to show the AI
-    const shuffled = [...options].sort(() => Math.random() - 0.5);
-    examples = shuffled.slice(0, 5);
+  const poolOptions: string[] = key
+    ? (() => {
+        const pool = SUBCATEGORY_POOLS[key];
+        return language === "tr" ? pool.tr : pool.en;
+      })()
+    : [];
+
+  // 50% chance: return a direct random pick from the pool instantly (no AI latency)
+  // 50% chance: ask AI to invent something fresh, using the pool as "inspiration, not repetition"
+  if (poolOptions.length > 0 && Math.random() < 0.5) {
+    const subcategory = poolOptions[Math.floor(Math.random() * poolOptions.length)];
+    res.json({ subcategory });
+    return;
   }
+
+  // Show the full pool to AI so it knows what's been "done" and can branch out
+  const poolList = poolOptions.length > 0
+    ? poolOptions.join(", ")
+    : "(no predefined examples)";
 
   const systemPrompt =
     language === "tr"
-      ? `Sen bir kelime oyunu asistanısın. Verilen kategoriye uygun, GENİŞ ve eğlenceli bir alt kategori üret.
+      ? `Sen bir kelime oyunu asistanısın. "${category}" kategorisi için GENİŞ, BASİT ve OYNANABILIR bir alt kategori üret.
 
 KURALLAR:
-- Alt kategori kısa (2-4 kelime) ve basit olmalı.
-- Herkesin kolayca 5-10 örnek sayabileceği kadar geniş olmalı.
-- OYNAKANABİLİR olmalı: oyuncuların alt kategoriyle ilgili şeyler DÜŞÜNÜP YAZABİLECEĞİ bir konu olmalı.
-- Aşağıdaki örneklerden BİRİNİ de verebilir, veya bunlara benzeyen tamamen YENİ bir alt kategori üretebilirsin.
-- Sadece alt kategoriyi yaz, başka hiçbir şey yazma.`
-      : `You are a word game assistant. Generate a BROAD, fun sub-category for the given category.
+- Kısa (2-4 kelime) olmalı.
+- Oyuncuların kolayca 5-10 örnek yazabileceği kadar geniş olmalı.
+- Aşağıdaki mevcut listede OLMAYAN, ancak benzer tarzda yeni bir alt kategori üret.
+- Sadece alt kategoriyi yaz, başka hiçbir şey yazma.
+
+Mevcut liste (tekrar ETME, ilham al):
+${poolList}`
+      : `You are a word game assistant. Generate a BROAD, SIMPLE, and PLAYABLE sub-category for the "${category}" category.
 
 RULES:
-- Keep it short (2-4 words) and simple.
-- Must be broad enough that players can easily name 5-10 examples.
-- Must be PLAYABLE: players must be able to think of and write things related to this topic.
-- You may return ONE of the examples below, or generate a completely NEW sub-category inspired by them.
-- Output ONLY the sub-category name, nothing else.`;
+- Keep it short (2-4 words).
+- Players must be able to easily name 5-10 things in it.
+- Invent something NOT already in the list below, but in the same style.
+- Output ONLY the sub-category name, nothing else.
+
+Existing list (do NOT repeat, use for inspiration):
+${poolList}`;
 
   const userPrompt =
     language === "tr"
-      ? `Kategori: "${category}"
-
-Örnek alt kategoriler (bunlardan biri veya bunlara benzer yeni biri):
-${examples.map((e, i) => `${i + 1}. ${e}`).join("\n")}
-
-Yukarıdaki örneklerden biri veya bunlara benzeyen basit, geniş ve oynanabilir bir alt kategori üret.`
-      : `Category: "${category}"
-
-Example sub-categories (return one of these or a new one inspired by them):
-${examples.map((e, i) => `${i + 1}. ${e}`).join("\n")}
-
-Generate a broad, simple, and playable sub-category.`;
+      ? `"${category}" için listede olmayan, basit ve oynanabilir yeni bir alt kategori üret.`
+      : `Generate a fresh sub-category for "${category}" that is NOT in the existing list.`;
 
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       max_tokens: 30,
+      temperature: 1.3,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -75,7 +80,12 @@ Generate a broad, simple, and playable sub-category.`;
     res.json({ subcategory });
   } catch (err) {
     req.log.error({ err }, "Failed to generate sub-category");
-    res.status(500).json({ error: "Failed to generate sub-category" });
+    // Fallback to a random pool pick if AI fails
+    if (poolOptions.length > 0) {
+      res.json({ subcategory: poolOptions[Math.floor(Math.random() * poolOptions.length)] });
+    } else {
+      res.status(500).json({ error: "Failed to generate sub-category" });
+    }
   }
 });
 
