@@ -29,6 +29,19 @@ export default function RoomLobby() {
     }
   }, [room?.code]);
 
+  // When player navigates away from the lobby (back button, home, etc.),
+  // remove them from the room so others don't see a ghost player.
+  useEffect(() => {
+    return () => {
+      if (!ws || !room || !player) return;
+      if (room.status !== "waiting") return;
+      try {
+        ws.send(JSON.stringify({ type: "leave_room", roomCode: room.code, playerId: player.id }));
+      } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // If someone navigates to the lobby while a game is in progress, treat them as
   // having left. Send leave_game so other players aren't stuck, then go home.
   useEffect(() => {

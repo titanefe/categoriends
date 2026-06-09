@@ -30,7 +30,8 @@ type WSMessage =
   | { type: "reset_room"; roomCode: string }
   | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number }
   | { type: "kick_player"; roomCode: string; hostId: string; targetId: string }
-  | { type: "leave_game"; roomCode: string; playerId: string };
+  | { type: "leave_game"; roomCode: string; playerId: string }
+  | { type: "leave_room"; roomCode: string; playerId: string };
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
@@ -332,6 +333,23 @@ export function setupWebSocket(server: Server): WebSocketServer {
           broadcastAll(msg.roomCode, {
             type: "player_left",
             playerId: msg.targetId,
+            room: getRoom(msg.roomCode),
+          });
+          break;
+        }
+
+        case "leave_room": {
+          const room = getRoom(msg.roomCode);
+          if (!room || room.status !== "waiting") return;
+          const wasHost = room.hostId === msg.playerId;
+          removePlayerFromRoom(msg.roomCode, msg.playerId);
+          const updated = getRoom(msg.roomCode);
+          if (wasHost && updated && updated.players.length > 0) {
+            updateRoom(msg.roomCode, { hostId: updated.players[0].id });
+          }
+          broadcastAll(msg.roomCode, {
+            type: "player_left",
+            playerId: msg.playerId,
             room: getRoom(msg.roomCode),
           });
           break;
