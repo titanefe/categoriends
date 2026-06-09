@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "v59LGy3eulr7KZ5NHu82l"
+uri = "file://artifacts/categoriends/public/sitemap.xml"
+type = "unspecified"
+title = "sitemap.xml"

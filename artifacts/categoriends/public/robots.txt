@@ -1,2 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /game
+Disallow: /result
+Disallow: /room/
+
+Sitemap: https://categoriends.replit.app/sitemap.xml
