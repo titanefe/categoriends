@@ -3,27 +3,22 @@ import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type GameMode, type Room, type Player } from "@/context/GameContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
-import { useGenerateSubcategory } from "@workspace/api-client-react";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
-  const { setRoom, setPlayer, setGameState, room, connectWs, ws } = useGame();
+  const { setRoom, setPlayer, room, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<GameMode>("duel");
   const [selected, setSelected] = useState<string | null>(null);
   const [custom, setCustom] = useState("");
   const [name, setName] = useState("");
   const [timeSeconds, setTimeSeconds] = useState(15);
-  const [step, setStep] = useState<"setup" | "lobby">("setup");
   const [error, setError] = useState("");
-  const [generatedCode, setGeneratedCode] = useState("");
 
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
-  const generateMutation = useGenerateSubcategory();
 
-  // Listen for room messages on ws
   useEffect(() => {
     if (!ws) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -31,27 +26,16 @@ export default function CreateRoom() {
         const data = JSON.parse(evt.data);
         if (data.type === "room_created" && data.room) {
           setRoom(data.room as Room);
-          setGeneratedCode(data.room.code);
-          setStep("lobby");
+          setLocation(`/room/${data.room.code}`);
         }
         if (data.type === "player_joined" && data.room) {
           setRoom(data.room as Room);
-        }
-        if (data.type === "game_started") {
-          setGameState({
-            subcategory: data.subcategory,
-            currentPlayerId: data.firstPlayerId,
-            acceptedAnswers: [],
-            timeLeft: room?.timeSeconds ?? 15,
-            round: 1,
-          });
-          setLocation("/game");
         }
       } catch {}
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, setRoom, setGameState, setLocation, room?.timeSeconds]);
+  }, [ws, setRoom, setLocation, room?.timeSeconds]);
 
   function handleCreate() {
     const category = custom.trim() || selected;
@@ -85,96 +69,6 @@ export default function CreateRoom() {
     tryCreate();
   }
 
-  function handleStartGame() {
-    if (!room || !ws) return;
-
-    const isCustom = !!(custom.trim());
-    if (isCustom) {
-      ws.send(JSON.stringify({
-        type: "start_game",
-        roomCode: room.code,
-        subcategory: custom.trim(),
-      }));
-      return;
-    }
-
-    generateMutation.mutate(
-      { data: { category: room.category, language: lang } },
-      {
-        onSuccess: (result) => {
-          ws.send(JSON.stringify({
-            type: "start_game",
-            roomCode: room.code,
-            subcategory: result.subcategory,
-          }));
-        },
-        onError: () => setError("Failed to generate sub-category. Try again."),
-      }
-    );
-  }
-
-  if (step === "lobby") {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8">
-        <div className="w-full max-w-sm">
-          <button
-            onClick={() => setStep("setup")}
-            className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
-          >
-            &larr; {t("nav.back")}
-          </button>
-          <h2 className="text-2xl font-bold mb-1">{t("lobby.waiting")}</h2>
-          <p className="text-muted-foreground text-sm mb-6">
-            {mode === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}
-            {" — "}{timeSeconds}{t("setup.perTurnSuffix")}
-          </p>
-
-          <div className="bg-card border border-primary/30 rounded-xl p-5 mb-6 text-center">
-            <p className="text-xs text-muted-foreground font-mono mb-2 tracking-widest uppercase">{t("lobby.code")}</p>
-            <p data-testid="text-room-code" className="text-4xl font-mono font-bold text-primary neon-text tracking-widest">
-              {generatedCode}
-            </p>
-          </div>
-
-          <div className="mb-6">
-            <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">{t("lobby.players")}</p>
-            <div className="flex flex-col gap-2">
-              {(room?.players ?? []).map((p) => (
-                <div key={p.id} className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-card border border-border">
-                  <div className="w-2 h-2 rounded-full bg-accent" />
-                  <span className="text-sm font-medium text-foreground">{p.name}</span>
-                  {p.id === room?.hostId && <span className="ml-auto text-xs text-primary font-mono">host</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {(room?.players.length ?? 0) < 2 && (
-            <p className="text-muted-foreground text-xs text-center font-mono mb-4">
-              {t("lobby.waitingForHost")}
-            </p>
-          )}
-
-          {error && <p className="text-destructive text-sm mb-4">{error}</p>}
-
-          <button
-            data-testid="button-start-game"
-            onClick={handleStartGame}
-            disabled={generateMutation.isPending || (room?.players.length ?? 0) < 2}
-            className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
-          >
-            {generateMutation.isPending ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Generating...
-              </span>
-            ) : t("lobby.start")}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
       <div className="w-full max-w-sm py-4">
@@ -189,7 +83,6 @@ export default function CreateRoom() {
         <h2 className="text-2xl font-bold mb-1">{t("home.createRoom")}</h2>
         <p className="text-muted-foreground text-sm mb-6">{t("setup.createSubtitle")}</p>
 
-        {/* Your name */}
         <div className="mb-5">
           <label className="text-xs text-muted-foreground font-mono tracking-widest uppercase block mb-2">
             {t("setup.yourName")}
@@ -204,7 +97,6 @@ export default function CreateRoom() {
           />
         </div>
 
-        {/* Mode selection */}
         <div className="mb-5">
           <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">{t("setup.mode")}</p>
           <div className="grid grid-cols-2 gap-2">
@@ -223,7 +115,6 @@ export default function CreateRoom() {
           </div>
         </div>
 
-        {/* Time per turn */}
         <div className="mb-5">
           <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
             {t("setup.timePerturn")}
@@ -245,7 +136,6 @@ export default function CreateRoom() {
           </div>
         </div>
 
-        {/* Category selection */}
         <div className="mb-5">
           <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">{t("setup.chooseCategory")}</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
