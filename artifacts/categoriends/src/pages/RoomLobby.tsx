@@ -10,7 +10,6 @@ const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 export default function RoomLobby() {
   const { t } = useTranslation();
   const [kickedMsg, setKickedMsg] = useState("");
-  const [tappedPlayerId, setTappedPlayerId] = useState<string | null>(null);
   const { code } = useParams<{ code: string }>();
   const { room, setRoom, player, ws, setGameState } = useGame();
   const [, setLocation] = useLocation();
@@ -263,44 +262,31 @@ export default function RoomLobby() {
         <div className="mb-6">
           <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">{t("lobby.players")}</p>
           <div className="flex flex-col gap-2">
-            {room.players.map((p) => {
-              const isTapped = tappedPlayerId === p.id;
-              const isKickable = isHost && p.id !== player?.id;
-              return (
-                <div
-                  key={p.id}
-                  data-testid={`row-player-${p.id}`}
-                  onClick={() => {
-                    if (!isKickable) return;
-                    setTappedPlayerId(isTapped ? null : p.id);
-                  }}
-                  className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border animate-slide-up transition-colors ${
-                    isTapped
-                      ? "bg-destructive/10 border-destructive/40"
-                      : "bg-card border-border"
-                  } ${isKickable ? "cursor-pointer active:opacity-80 touch-manipulation" : ""}`}
-                >
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isTapped ? "bg-destructive" : "bg-accent"}`} />
-                  <span className="text-sm font-medium flex-1 truncate">{p.name}</span>
-
-                  {p.id === room.hostId && (
-                    <span className="text-xs text-primary font-mono">{t("lobby.host")}</span>
-                  )}
-                  {p.id === player?.id && p.id !== room.hostId && (
-                    <span className="text-xs text-muted-foreground font-mono">{t("lobby.you")}</span>
-                  )}
-
-                  {isKickable && isTapped && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleKick(p.id); }}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-destructive text-white text-xs font-semibold active:scale-95 transition-all touch-manipulation"
-                    >
-                      {t("lobby.kick")}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+            {room.players.map((p) => (
+              <div
+                key={p.id}
+                data-testid={`row-player-${p.id}`}
+                className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-card border border-border animate-slide-up"
+              >
+                <div className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
+                <span className="text-sm font-medium flex-1 truncate">{p.name}</span>
+                {p.id === room.hostId && (
+                  <span className="text-xs text-primary font-mono">{t("lobby.host")}</span>
+                )}
+                {p.id === player?.id && p.id !== room.hostId && (
+                  <span className="text-xs text-muted-foreground font-mono">{t("lobby.you")}</span>
+                )}
+                {isHost && p.id !== player?.id && (
+                  <button
+                    onClick={() => handleKick(p.id)}
+                    className="ml-1 text-destructive/60 hover:text-destructive active:scale-95 transition-all touch-manipulation p-1"
+                    title={t("lobby.kick")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
