@@ -48,6 +48,11 @@ export default function Result() {
   function handleReturnToLobby() {
     if (!ws || !room) return;
     ws.send(JSON.stringify({ type: "reset_room", roomCode: room.code }));
+    // Navigate immediately — don't wait for the broadcast round-trip.
+    // RoomLobby's room_reset listener will redirect to the new code once the
+    // server responds.
+    setGameState(null);
+    setLocation(`/room/${room.code}`);
   }
 
   return (
