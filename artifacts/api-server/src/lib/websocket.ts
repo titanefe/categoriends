@@ -22,6 +22,8 @@ interface ExtWebSocket extends WebSocket {
 type WSMessage =
   | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number }
   | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string }
+  | { type: "rejoin"; roomCode: string; playerId: string }
+  | { type: "ping" }
   | { type: "start_game"; roomCode: string; subcategory: string }
   | { type: "answer_submitted"; roomCode: string; playerId: string; answer: string; valid: boolean; reason: string }
   | { type: "player_eliminated"; roomCode: string; playerId: string }
@@ -39,9 +41,21 @@ const roomSockets = new Map<string, Set<ExtWebSocket>>();
 // client never sends player_eliminated within the allowed turn window.
 const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Disconnect grace-period timers: give players 5 s to reconnect before eliminating.
+const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+// Tracks when the current turn started (per room) so rejoining clients can resync their timer.
+const currentTurnStartedAt = new Map<string, number>();
+
 function clearTurnTimer(roomCode: string): void {
   const t = turnTimers.get(roomCode);
   if (t !== undefined) { clearTimeout(t); turnTimers.delete(roomCode); }
+}
+
+function clearDisconnectTimer(roomCode: string, playerId: string): void {
+  const key = `${roomCode}:${playerId}`;
+  const t = disconnectTimers.get(key);
+  if (t !== undefined) { clearTimeout(t); disconnectTimers.delete(key); }
 }
 
 function scheduleTurnTimeout(roomCode: string, playerId: string): void {
@@ -63,6 +77,7 @@ function scheduleTurnTimeout(roomCode: string, playerId: string): void {
       const next = getNextPlayer(r);
       updateRoom(roomCode, { currentPlayerId: next });
       const ts = Date.now();
+      currentTurnStartedAt.set(roomCode, ts);
       broadcastAll(roomCode, {
         type: "player_eliminated",
         playerId,
@@ -225,11 +240,13 @@ export function setupWebSocket(server: Server): WebSocketServer {
             currentPlayerId: firstPlayerId,
           });
 
+          const tsStart = Date.now();
+          currentTurnStartedAt.set(msg.roomCode, tsStart);
           broadcastAll(msg.roomCode, {
             type: "game_started",
             subcategory: msg.subcategory,
             firstPlayerId,
-            turnStartedAt: Date.now(),
+            turnStartedAt: tsStart,
             room: getRoom(msg.roomCode),
           });
           if (firstPlayerId) scheduleTurnTimeout(msg.roomCode, firstPlayerId);
@@ -262,6 +279,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             });
 
             const tsTurnPassed = Date.now();
+            currentTurnStartedAt.set(msg.roomCode, tsTurnPassed);
             broadcastAll(msg.roomCode, {
               type: "turn_passed",
               nextPlayerId,
@@ -290,11 +308,13 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const nextPlayerId = getNextPlayer(room);
           updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
 
+          const tsElim = Date.now();
+          currentTurnStartedAt.set(msg.roomCode, tsElim);
           broadcastAll(msg.roomCode, {
             type: "player_eliminated",
             playerId: msg.playerId,
             nextPlayerId,
-            turnStartedAt: Date.now(),
+            turnStartedAt: tsElim,
             room: getRoom(msg.roomCode),
           });
           if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
@@ -308,6 +328,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const nextPlayerId = getNextPlayer(room);
           updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
           const tsNextTurn = Date.now();
+          currentTurnStartedAt.set(msg.roomCode, tsNextTurn);
           broadcastAll(msg.roomCode, {
             type: "turn_passed",
             nextPlayerId,
@@ -422,6 +443,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           if (!checkAndEndGame(msg.roomCode)) {
             const tsLeave = Date.now();
+            currentTurnStartedAt.set(msg.roomCode, tsLeave);
             if (room.currentPlayerId === msg.playerId) {
               const nextPlayerId = getNextPlayer(room);
               updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
@@ -446,6 +468,30 @@ export function setupWebSocket(server: Server): WebSocketServer {
           }
           break;
         }
+
+        case "rejoin": {
+          clearDisconnectTimer(msg.roomCode, msg.playerId);
+          const room = getRoom(msg.roomCode);
+          if (!room) { sendToSocket(ws, { type: "error", message: "Room not found" }); return; }
+          const rejoiningPlayer = room.players.find((p) => p.id === msg.playerId);
+          if (!rejoiningPlayer) { sendToSocket(ws, { type: "error", message: "Player not found" }); return; }
+          // Re-attach this socket to the room
+          ws.roomCode = msg.roomCode;
+          ws.playerId = msg.playerId;
+          if (!roomSockets.has(msg.roomCode)) roomSockets.set(msg.roomCode, new Set());
+          roomSockets.get(msg.roomCode)!.add(ws);
+          // Send full game state so the rejoining client resyncs their timer and UI
+          const tsSynced = currentTurnStartedAt.get(msg.roomCode) ?? Date.now();
+          sendToSocket(ws, {
+            type: "game_state_sync",
+            room: getRoom(msg.roomCode),
+            turnStartedAt: tsSynced,
+          });
+          break;
+        }
+
+        case "ping":
+          break;
 
         case "update_room_settings": {
           const room = getRoom(msg.roomCode);
@@ -482,40 +528,49 @@ export function setupWebSocket(server: Server): WebSocketServer {
       }
 
       if (room.status === "playing") {
-        // During an active game: mark the player as eliminated rather than
-        // removing them — this prevents the active-player count from dropping
-        // and causing a premature game-over for the remaining players.
+        // During an active game: give the player a 5-second grace period to
+        // reconnect (tab switch, brief network blip) before eliminating them.
         const player = room.players.find((p) => p.id === playerId);
         if (player && !player.eliminated) {
-          clearTurnTimer(roomCode);
-          player.eliminated = true;
-          updateRoom(roomCode, { players: room.players });
+          const graceKey = `${roomCode}:${playerId}`;
+          clearDisconnectTimer(roomCode, playerId);
+          disconnectTimers.set(graceKey, setTimeout(() => {
+            disconnectTimers.delete(graceKey);
+            const r = getRoom(roomCode);
+            if (!r || r.status !== "playing") return;
+            const p = r.players.find((pl) => pl.id === playerId);
+            if (!p || p.eliminated) return; // already handled elsewhere
 
-          if (!checkAndEndGame(roomCode)) {
-            // Game continues — if it was this player's turn, advance to next
-            const tsClose = Date.now();
-            if (room.currentPlayerId === playerId) {
-              const nextPlayerId = getNextPlayer(room);
-              updateRoom(roomCode, { currentPlayerId: nextPlayerId });
-              broadcastAll(roomCode, {
-                type: "player_eliminated",
-                playerId,
-                nextPlayerId,
-                turnStartedAt: tsClose,
-                room: getRoom(roomCode),
-              });
-              if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
-            } else {
-              broadcastAll(roomCode, {
-                type: "player_left",
-                playerId,
-                room: getRoom(roomCode),
-              });
-              // Timer for the current player is still running — reschedule to
-              // pick up any remaining time accurately
-              if (room.currentPlayerId) scheduleTurnTimeout(roomCode, room.currentPlayerId);
+            clearTurnTimer(roomCode);
+            p.eliminated = true;
+            updateRoom(roomCode, { players: r.players });
+
+            if (!checkAndEndGame(roomCode)) {
+              const ts = Date.now();
+              currentTurnStartedAt.set(roomCode, ts);
+              if (r.currentPlayerId === playerId) {
+                const nextPlayerId = getNextPlayer(r);
+                updateRoom(roomCode, { currentPlayerId: nextPlayerId });
+                broadcastAll(roomCode, {
+                  type: "player_eliminated",
+                  playerId,
+                  nextPlayerId,
+                  turnStartedAt: ts,
+                  room: getRoom(roomCode),
+                });
+                if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
+              } else {
+                broadcastAll(roomCode, {
+                  type: "player_eliminated",
+                  playerId,
+                  nextPlayerId: r.currentPlayerId,
+                  turnStartedAt: ts,
+                  room: getRoom(roomCode),
+                });
+                if (r.currentPlayerId) scheduleTurnTimeout(roomCode, r.currentPlayerId);
+              }
             }
-          }
+          }, 5_000));
         }
       } else {
         // Lobby or finished: remove the player normally

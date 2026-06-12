@@ -93,6 +93,7 @@ export default function CreateRoom() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("setup.yourNamePlaceholder")}
+            maxLength={20}
             className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           />
         </div>

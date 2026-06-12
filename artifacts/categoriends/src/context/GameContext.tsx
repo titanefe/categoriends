@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useRef, useEffect, ReactNode } from "react";
 import { Language } from "../i18n/translations";
 
 export type GameMode = "solo" | "duel" | "party";
@@ -52,44 +52,142 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [player, setPlayer] = useState<Player | null>(null);
-  const [room, setRoom] = useState<Room | null>(null);
+  const [player, setPlayerState] = useState<Player | null>(null);
+  const [room, setRoomState] = useState<Room | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
+  const roomRef = useRef<Room | null>(null);
+  const playerRef = useRef<Player | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Prevents auto-reconnect when the user explicitly navigates away
+  const preventReconnectRef = useRef(false);
+
+  const setRoom = (r: Room | null) => {
+    roomRef.current = r;
+    setRoomState(r);
+  };
+
+  const setPlayer = (p: Player | null) => {
+    playerRef.current = p;
+    setPlayerState(p);
+  };
+
+  function stopPing() {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+  }
+
+  function startPing(ws: WebSocket) {
+    stopPing();
+    pingIntervalRef.current = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try { ws.send(JSON.stringify({ type: "ping" })); } catch {}
+      }
+    }, 20_000);
+  }
+
+  // Opens a fresh WS connection and sets up all handlers.
+  // onOpen is called once the connection is established.
+  function openConnection(onOpen?: (ws: WebSocket) => void): WebSocket {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsInstance(ws);
+      startPing(ws);
+      onOpen?.(ws);
+    };
+
+    ws.onclose = () => {
+      stopPing();
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+        setWsInstance(null);
+      }
+      // Auto-reconnect only during an active game and when not explicitly leaving
+      if (preventReconnectRef.current) return;
+      const r = roomRef.current;
+      const p = playerRef.current;
+      if (r && p && r.status === "playing") {
+        scheduleReconnect();
+      }
+    };
+
+    ws.onerror = () => { /* onclose fires after onerror */ };
+
+    return ws;
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimerRef.current) return; // already pending
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      if (preventReconnectRef.current) return;
+      const r = roomRef.current;
+      const p = playerRef.current;
+      if (!r || !p || r.status !== "playing") return;
+      if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) return;
+
+      openConnection((ws) => {
+        // Re-join the room so the server restores our slot
+        const r2 = roomRef.current;
+        const p2 = playerRef.current;
+        if (r2 && p2) {
+          try {
+            ws.send(JSON.stringify({ type: "rejoin", roomCode: r2.code, playerId: p2.id }));
+          } catch {}
+        }
+      });
+    }, 1_500);
+  }
+
+  // Reconnect immediately when the tab regains focus and the socket is dead
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden || preventReconnectRef.current) return;
+      const r = roomRef.current;
+      const p = playerRef.current;
+      if (!r || !p || r.status !== "playing") return;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        scheduleReconnect();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const connectWs = (): WebSocket => {
     if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       return wsRef.current;
     }
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      setWsInstance(ws);
-    };
-
-    ws.onclose = () => {
-      wsRef.current = null;
-      setWsInstance(null);
-    };
-
-    ws.onerror = () => {
-      wsRef.current = null;
-      setWsInstance(null);
-    };
-
-    wsRef.current = ws;
-    return ws;
+    return openConnection();
   };
 
   const disconnectWs = () => {
+    preventReconnectRef.current = true;
+    stopPing();
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
       setWsInstance(null);
     }
+    // Re-enable reconnect shortly after (so "play again" still works)
+    setTimeout(() => { preventReconnectRef.current = false; }, 300);
   };
 
   return (

@@ -200,6 +200,21 @@ export default function GameScreen() {
             });
           }
         }
+        if (data.type === "game_state_sync" && data.room) {
+          // Received after reconnecting — resync room state and timer
+          setRoom(data.room);
+          const gs = gameStateRef.current;
+          if (data.room.status === "playing" && data.room.currentPlayerId) {
+            setGameState({
+              subcategory: data.room.subcategory ?? gs?.subcategory ?? "",
+              currentPlayerId: data.room.currentPlayerId,
+              acceptedAnswers: data.room.acceptedAnswers ?? gs?.acceptedAnswers ?? [],
+              timeLeft: data.room.timeSeconds ?? 15,
+              round: (gs?.round ?? 0) + 100,
+              turnStartedAt: data.turnStartedAt ?? Date.now(),
+            });
+          }
+        }
         if (data.type === "game_over") {
           if (timerRef.current) clearInterval(timerRef.current);
           setGameOverOverlay({ winnerName: data.winnerName ?? "Nobody" });
