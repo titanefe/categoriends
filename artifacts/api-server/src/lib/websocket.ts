@@ -360,21 +360,40 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           clearTurnTimer(msg.roomCode);
 
+          // Only carry over players who still have an active socket — anyone
+          // who disconnected during the game (or from the result screen) is dropped.
+          const oldSockets = roomSockets.get(msg.roomCode);
+          const connectedIds = new Set<string>();
+          if (oldSockets) {
+            for (const s of oldSockets) {
+              if (s.playerId && s.readyState === WebSocket.OPEN) {
+                connectedIds.add(s.playerId);
+              }
+            }
+          }
+
+          // Pick the new host: keep the original host if still connected,
+          // otherwise promote the first connected player in join order.
+          const newHostId = connectedIds.has(oldRoom.hostId)
+            ? oldRoom.hostId
+            : (oldRoom.players.find((p) => connectedIds.has(p.id))?.id ?? oldRoom.hostId);
+
           // Create a brand-new room so everything is clean (fixes custom-category
           // sticking around and 2nd-game crashes from stale state)
           const newRoom = createRoom(
-            oldRoom.hostId,
+            newHostId,
             oldRoom.mode,
             oldRoom.language,
             oldRoom.category,
             oldRoom.timeSeconds,
           );
           for (const p of oldRoom.players) {
-            addPlayerToRoom(newRoom.code, { ...p, score: 0, eliminated: false });
+            if (connectedIds.has(p.id)) {
+              addPlayerToRoom(newRoom.code, { ...p, score: 0, eliminated: false });
+            }
           }
 
           // Move all socket references from the old room to the new one
-          const oldSockets = roomSockets.get(msg.roomCode);
           if (oldSockets) {
             roomSockets.set(newRoom.code, new Set(oldSockets));
             roomSockets.delete(msg.roomCode);
