@@ -1,6 +1,6 @@
-# [Project name]
+# Categoriends
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Real-time multiplayer category word game — play solo, 1v1 duel, or party mode with friends. Name things before the timer runs out!
 
 ## Run & Operate
 

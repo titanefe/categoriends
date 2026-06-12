@@ -1,0 +1,17 @@
+{
+  "name": "Categoriends - Online Category Game & Words Trivia",
+  "short_name": "Categoriends",
+  "description": "Categoriends: Fun online games to play with friends! En iyi İngilizce kelime oyunu ve category game deneyimi. Arkadaşlarınla 4 kişilik oyun kur ve yarış!",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0E0F14",
+  "theme_color": "#A855F7",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
