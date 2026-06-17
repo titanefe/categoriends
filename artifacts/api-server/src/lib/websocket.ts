@@ -166,7 +166,7 @@ function checkAndEndGame(roomCode: string): boolean {
 
     const eloDeltas: Record<string, number> = {};
     const playersWithUserId = room.players.filter((p) => p.userId);
-    if (playersWithUserId.length >= 2 && !room.customSubcategory) {
+    if (playersWithUserId.length >= 1 && room.players.length >= 2 && !room.customSubcategory) {
       // Build rank from actual elimination order.
       // winner = rank 1, last eliminated = rank 2, ..., first eliminated = rank N.
       // eliminationOrder[0] = first eliminated (worst), eliminationOrder[last] = last eliminated (2nd best).
@@ -197,7 +197,8 @@ function checkAndEndGame(roomCode: string): boolean {
         );
       }
       for (const [id, delta] of deltaMap) {
-        eloDeltas[id] = delta;
+        const p = room.players.find((pl) => pl.id === id);
+        if (p?.userId) eloDeltas[id] = delta;
       }
       void persistEloDeltas(room, deltaMap);
     }
