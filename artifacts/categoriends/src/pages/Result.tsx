@@ -141,8 +141,10 @@ export default function Result() {
                       </span>
                     </div>
                   )}
-                  {user && isCustom && (
-                    <p className="text-xs text-muted-foreground/50 font-mono mt-3">{t("elo.noRating")}</p>
+                  {isCustom && (
+                    <p className="text-xs text-muted-foreground/50 font-mono mt-3">
+                      Custom categories don&apos;t affect your Elo rating. / Özel kategoriler Elo puanınızı etkilemez.
+                    </p>
                   )}
                   {!user && (
                     <p className="text-xs text-muted-foreground/50 font-mono mt-3">{t("auth.loginToTrackElo")}</p>
@@ -185,7 +187,12 @@ export default function Result() {
                   );
                 })}
               </div>
-              {!user && (
+              {isCustom && (
+                <p className="text-xs text-muted-foreground/50 font-mono mt-3 text-center">
+                  Custom categories don&apos;t affect your Elo rating. / Özel kategoriler Elo puanınızı etkilemez.
+                </p>
+              )}
+              {!user && !isCustom && (
                 <p className="text-xs text-muted-foreground/50 font-mono mt-3 text-center">{t("auth.loginToTrackElo")}</p>
               )}
             </div>
