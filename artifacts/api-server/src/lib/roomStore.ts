@@ -22,6 +22,8 @@ export interface Room {
   turnOrder: string[];
   timeSeconds: number;
   createdAt: number;
+  /** IDs of eliminated players in order, earliest eliminated first. */
+  eliminationOrder: string[];
 }
 
 const rooms = new Map<string, Room>();
@@ -61,6 +63,7 @@ export function createRoom(
     turnOrder: [],
     timeSeconds,
     createdAt: Date.now(),
+    eliminationOrder: [],
   };
   rooms.set(code, room);
   return room;

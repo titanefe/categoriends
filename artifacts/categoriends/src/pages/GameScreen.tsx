@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
 import { useVerifyAnswer } from "@workspace/api-client-react";
 
 type AnimState = "idle" | "accepted" | "rejected";
@@ -9,7 +10,8 @@ type GameOverOverlay = { winnerName: string } | null;
 
 export default function GameScreen() {
   const { t, lang } = useTranslation();
-  const { player, room, gameState, setGameState, setRoom, setEloDeltas, ws } = useGame();
+  const { player, room, gameState, setGameState, setRoom, setEloDeltas, setSoloToken, ws } = useGame();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const verifyMutation = useVerifyAnswer();
 
@@ -97,6 +99,17 @@ export default function GameScreen() {
     return () => { sendLeaveGame(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch a one-time solo Elo token at game start so Result.tsx can record the result
+  const soloTokenFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!isSolo || !user || soloTokenFetchedRef.current) return;
+    soloTokenFetchedRef.current = true;
+    fetch("/api/elo/solo-token", { method: "POST", credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => { if (data.token) setSoloToken(data.token); })
+      .catch(() => {});
+  }, [isSolo, user, setSoloToken]);
 
   // Auto-dismiss category popup after 3 seconds
   useEffect(() => {

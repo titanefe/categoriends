@@ -47,6 +47,8 @@ interface GameContextType {
   setGameState: (gs: GameState | null) => void;
   eloDeltas: Record<string, number> | null;
   setEloDeltas: (d: Record<string, number> | null) => void;
+  soloToken: string | null;
+  setSoloToken: (t: string | null) => void;
   ws: WebSocket | null;
   connectWs: () => WebSocket;
   disconnectWs: () => void;
@@ -59,6 +61,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [room, setRoomState] = useState<Room | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [eloDeltas, setEloDeltas] = useState<Record<string, number> | null>(null);
+  const [soloToken, setSoloToken] = useState<string | null>(null);
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -193,6 +196,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       room, setRoom,
       gameState, setGameState,
       eloDeltas, setEloDeltas,
+      soloToken, setSoloToken,
       ws: wsInstance,
       connectWs, disconnectWs,
     }}>

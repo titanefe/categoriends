@@ -22,13 +22,16 @@ export function soloEloDelta(currentElo: number, answerCount: number): number {
   return Math.round(K * (actual - 0.5));
 }
 
-/** 1v1 Elo change. K = 40 for all online games. */
+/**
+ * 1v1 Elo change. Each player uses their own band-based K-factor.
+ * won = true if this player won.
+ */
 export function duelEloDelta(
   playerElo: number,
   opponentElo: number,
   won: boolean,
 ): number {
-  const K = 40;
+  const K = kFactor(playerElo);
   const exp = expectedScore(playerElo, opponentElo);
   return Math.round(K * ((won ? 1 : 0) - exp));
 }
@@ -36,12 +39,12 @@ export function duelEloDelta(
 /**
  * Party Elo deltas using pairwise comparison.
  * rank 1 = winner (last standing), higher rank = eliminated earlier.
+ * Each player uses their own band-based K-factor.
  * Returns a map of playerId → delta.
  */
 export function partyEloDeltas(
   players: { id: string; elo: number; rank: number }[],
 ): Map<string, number> {
-  const K = 40;
   const deltas = new Map<string, number>(players.map((p) => [p.id, 0]));
 
   for (let i = 0; i < players.length; i++) {
@@ -52,8 +55,8 @@ export function partyEloDeltas(
       const bWon = b.rank < a.rank;
       const aExp = expectedScore(a.elo, b.elo);
       const bExp = expectedScore(b.elo, a.elo);
-      deltas.set(a.id, (deltas.get(a.id) ?? 0) + Math.round(K * ((aWon ? 1 : 0) - aExp)));
-      deltas.set(b.id, (deltas.get(b.id) ?? 0) + Math.round(K * ((bWon ? 1 : 0) - bExp)));
+      deltas.set(a.id, (deltas.get(a.id) ?? 0) + Math.round(kFactor(a.elo) * ((aWon ? 1 : 0) - aExp)));
+      deltas.set(b.id, (deltas.get(b.id) ?? 0) + Math.round(kFactor(b.elo) * ((bWon ? 1 : 0) - bExp)));
     }
   }
 

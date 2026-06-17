@@ -61,8 +61,6 @@ export default function CreateRoom() {
           language: lang,
           category,
           timeSeconds,
-          userId: user?.id ?? null,
-          elo: user?.elo ?? 1000,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryCreate, 100);

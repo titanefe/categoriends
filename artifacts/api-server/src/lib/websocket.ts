@@ -1,5 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
+import type { Request, Response } from "express";
 import type { Server } from "http";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
@@ -18,15 +19,18 @@ import {
 } from "./roomStore";
 import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
+import { sessionMiddleware } from "../app";
 
 interface ExtWebSocket extends WebSocket {
   roomCode?: string;
   playerId?: string;
+  /** userId resolved from the session cookie at connection time */
+  sessionUserId?: string | null;
 }
 
 type WSMessage =
-  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number; userId?: string | null; elo?: number }
-  | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string; userId?: string | null; elo?: number }
+  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number }
+  | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string }
   | { type: "rejoin"; roomCode: string; playerId: string }
   | { type: "ping" }
   | { type: "start_game"; roomCode: string; subcategory: string; customSubcategory?: boolean }
@@ -42,17 +46,9 @@ type WSMessage =
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
-// Server-side per-room turn timers — auto-eliminates a ghost player if the
-// client never sends player_eliminated within the allowed turn window.
 const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-// Disconnect grace-period timers: give players 5 s to reconnect before eliminating.
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-// Lobby heartbeat intervals — broadcast full room state every 3 s while waiting.
 const lobbyIntervals = new Map<string, ReturnType<typeof setInterval>>();
-
-// Tracks when the current turn started (per room) so rejoining clients can resync their timer.
 const currentTurnStartedAt = new Map<string, number>();
 
 function clearTurnTimer(roomCode: string): void {
@@ -72,7 +68,7 @@ function clearLobbyInterval(roomCode: string): void {
 }
 
 function startLobbyInterval(roomCode: string): void {
-  clearLobbyInterval(roomCode); // avoid duplicate intervals
+  clearLobbyInterval(roomCode);
   const interval = setInterval(() => {
     const r = getRoom(roomCode);
     if (!r || r.status !== "waiting") { clearLobbyInterval(roomCode); return; }
@@ -90,12 +86,12 @@ function scheduleTurnTimeout(roomCode: string, playerId: string): void {
     turnTimers.delete(roomCode);
     const r = getRoom(roomCode);
     if (!r || r.status !== "playing") return;
-    if (r.currentPlayerId !== playerId) return; // turn already moved on
+    if (r.currentPlayerId !== playerId) return;
     const p = r.players.find((pl) => pl.id === playerId);
     if (!p || p.eliminated) return;
-    // Auto-eliminate the unresponsive player
     p.eliminated = true;
-    updateRoom(roomCode, { players: r.players });
+    r.eliminationOrder.push(playerId);
+    updateRoom(roomCode, { players: r.players, eliminationOrder: r.eliminationOrder });
     if (!checkAndEndGame(roomCode)) {
       const next = getNextPlayer(r);
       updateRoom(roomCode, { currentPlayerId: next });
@@ -171,17 +167,33 @@ function checkAndEndGame(roomCode: string): boolean {
     const eloDeltas: Record<string, number> = {};
     const playersWithUserId = room.players.filter((p) => p.userId);
     if (playersWithUserId.length >= 2 && !room.customSubcategory) {
-      const sorted = [...room.players].sort((a, b) => b.score - a.score);
+      // Build rank from actual elimination order.
+      // winner = rank 1, last eliminated = rank 2, ..., first eliminated = rank N.
+      // eliminationOrder[0] = first eliminated (worst), eliminationOrder[last] = last eliminated (2nd best).
+      const rankOrder: string[] = winner
+        ? [winner.id, ...[...room.eliminationOrder].reverse()]
+        : [...room.eliminationOrder].reverse();
+
       let deltaMap: Map<string, number>;
       if (room.mode === "duel" && room.players.length === 2) {
-        const [p1, p2] = sorted;
-        deltaMap = new Map([
-          [p1.id, duelEloDelta(p1.elo, p2.elo, p1.score >= p2.score)],
-          [p2.id, duelEloDelta(p2.elo, p1.elo, p2.score > p1.score)],
-        ]);
+        const winnerId = rankOrder[0];
+        const loserId = rankOrder[1];
+        const winnerPlayer = room.players.find((p) => p.id === winnerId);
+        const loserPlayer = room.players.find((p) => p.id === loserId);
+        if (winnerPlayer && loserPlayer) {
+          deltaMap = new Map([
+            [winnerId, duelEloDelta(winnerPlayer.elo, loserPlayer.elo, true)],
+            [loserId, duelEloDelta(loserPlayer.elo, winnerPlayer.elo, false)],
+          ]);
+        } else {
+          deltaMap = new Map();
+        }
       } else {
         deltaMap = partyEloDeltas(
-          sorted.map((p, idx) => ({ id: p.id, elo: p.elo, rank: idx + 1 })),
+          rankOrder.map((id, idx) => {
+            const p = room.players.find((pl) => pl.id === id)!;
+            return { id, elo: p.elo, rank: idx + 1 };
+          }),
         );
       }
       for (const [id, delta] of deltaMap) {
@@ -208,6 +220,17 @@ export function setupWebSocket(server: Server): WebSocketServer {
   wss.on("connection", (ws: ExtWebSocket, req: IncomingMessage) => {
     logger.info({ ip: req.socket.remoteAddress }, "WS client connected");
 
+    // Resolve the authenticated user from the session cookie.
+    // sessionMiddleware populates req.session; we store userId on the socket
+    // so all message handlers can trust it without accepting it from the client.
+    (sessionMiddleware as unknown as (req: Request, res: Response, next: () => void) => void)(
+      req as unknown as Request,
+      {} as unknown as Response,
+      () => {
+        ws.sessionUserId = (req as unknown as Request).session?.userId ?? null;
+      },
+    );
+
     ws.on("message", (data) => {
       let msg: WSMessage;
       try {
@@ -219,30 +242,42 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
       switch (msg.type) {
         case "create_room": {
-          const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category, msg.timeSeconds ?? 15);
-          const player: Player = {
-            id: msg.hostId,
-            name: msg.playerName,
-            score: 0,
-            eliminated: false,
-            userId: msg.userId ?? null,
-            elo: msg.elo ?? 1000,
-          };
-          addPlayerToRoom(room.code, player);
-          ws.roomCode = room.code;
-          ws.playerId = msg.hostId;
+          void (async () => {
+            // Resolve identity from session — never trust client-supplied userId/elo
+            const userId = ws.sessionUserId ?? null;
+            let elo = 1000;
+            if (userId) {
+              try {
+                const rows = await db.select({ elo: usersTable.elo }).from(usersTable).where(eq(usersTable.id, userId));
+                elo = rows[0]?.elo ?? 1000;
+              } catch { /* use default */ }
+            }
 
-          if (!roomSockets.has(room.code)) {
-            roomSockets.set(room.code, new Set());
-          }
-          roomSockets.get(room.code)!.add(ws);
+            const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category, msg.timeSeconds ?? 15);
+            const player: Player = {
+              id: msg.hostId,
+              name: msg.playerName,
+              score: 0,
+              eliminated: false,
+              userId,
+              elo,
+            };
+            addPlayerToRoom(room.code, player);
+            ws.roomCode = room.code;
+            ws.playerId = msg.hostId;
 
-          sendToSocket(ws, {
-            type: "room_created",
-            room: getRoom(room.code),
-          });
+            if (!roomSockets.has(room.code)) {
+              roomSockets.set(room.code, new Set());
+            }
+            roomSockets.get(room.code)!.add(ws);
 
-          startLobbyInterval(room.code);
+            sendToSocket(ws, {
+              type: "room_created",
+              room: getRoom(room.code),
+            });
+
+            startLobbyInterval(room.code);
+          })();
           break;
         }
 
@@ -265,37 +300,48 @@ export function setupWebSocket(server: Server): WebSocketServer {
             return;
           }
 
-          const player: Player = {
-            id: msg.playerId,
-            name: msg.playerName,
-            score: 0,
-            eliminated: false,
-            userId: msg.userId ?? null,
-            elo: msg.elo ?? 1000,
-          };
+          void (async () => {
+            // Resolve identity from session — never trust client-supplied userId/elo
+            const userId = ws.sessionUserId ?? null;
+            let elo = 1000;
+            if (userId) {
+              try {
+                const rows = await db.select({ elo: usersTable.elo }).from(usersTable).where(eq(usersTable.id, userId));
+                elo = rows[0]?.elo ?? 1000;
+              } catch { /* use default */ }
+            }
 
-          ws.roomCode = msg.roomCode;
-          ws.playerId = msg.playerId;
+            const player: Player = {
+              id: msg.playerId,
+              name: msg.playerName,
+              score: 0,
+              eliminated: false,
+              userId,
+              elo,
+            };
 
-          if (!roomSockets.has(msg.roomCode)) {
-            roomSockets.set(msg.roomCode, new Set());
-          }
-          roomSockets.get(msg.roomCode)!.add(ws);
+            ws.roomCode = msg.roomCode;
+            ws.playerId = msg.playerId;
 
-          addPlayerToRoom(msg.roomCode, player);
+            if (!roomSockets.has(msg.roomCode)) {
+              roomSockets.set(msg.roomCode, new Set());
+            }
+            roomSockets.get(msg.roomCode)!.add(ws);
 
-          sendToSocket(ws, {
-            type: "room_state",
-            room: getRoom(msg.roomCode),
-          });
+            addPlayerToRoom(msg.roomCode, player);
 
-          // Broadcast full room state to everyone so all clients converge immediately
-          broadcastAll(msg.roomCode, {
-            type: "lobby_sync",
-            room: getRoom(msg.roomCode),
-          });
+            sendToSocket(ws, {
+              type: "room_state",
+              room: getRoom(msg.roomCode),
+            });
 
-          startLobbyInterval(msg.roomCode);
+            broadcastAll(msg.roomCode, {
+              type: "lobby_sync",
+              room: getRoom(msg.roomCode),
+            });
+
+            startLobbyInterval(msg.roomCode);
+          })();
           break;
         }
 
@@ -305,7 +351,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           clearLobbyInterval(msg.roomCode);
 
-          // Shuffle player order so the first player is random
           const turnOrder = [...room.players.map((p) => p.id)];
           for (let i = turnOrder.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -320,6 +365,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             acceptedAnswers: [],
             turnOrder,
             currentPlayerId: firstPlayerId,
+            eliminationOrder: [],
           });
 
           const tsStart = Date.now();
@@ -377,18 +423,15 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const room = getRoom(msg.roomCode);
           if (!room || room.status !== "playing") return;
 
-          // Guard: discard stale eliminations — if the turn already moved on
-          // (because the player submitted a valid answer just before time ran out),
-          // room.currentPlayerId will no longer point to msg.playerId.
           if (room.currentPlayerId !== msg.playerId) return;
 
           const player = room.players.find((p) => p.id === msg.playerId);
-          // Idempotent — ignore if already eliminated or not found
           if (!player || player.eliminated) return;
 
           clearTurnTimer(msg.roomCode);
           player.eliminated = true;
-          updateRoom(msg.roomCode, { players: room.players });
+          room.eliminationOrder.push(msg.playerId);
+          updateRoom(msg.roomCode, { players: room.players, eliminationOrder: room.eliminationOrder });
 
           if (checkAndEndGame(msg.roomCode)) break;
 
@@ -427,17 +470,23 @@ export function setupWebSocket(server: Server): WebSocketServer {
         }
 
         case "game_over_request": {
+          // Fallback end-of-game trigger (e.g. solo timer expiry redirect).
+          // Eliminate all active non-winner players in score order so checkAndEndGame
+          // can compute Elo from eliminationOrder correctly.
           const room = getRoom(msg.roomCode);
-          if (!room) return;
+          if (!room || room.status !== "playing") return;
           clearTurnTimer(msg.roomCode);
-          updateRoom(msg.roomCode, { status: "finished" });
-          const scores = room.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
-          broadcastAll(msg.roomCode, {
-            type: "game_over",
-            winnerId: msg.winnerId,
-            winnerName: msg.winnerName,
-            scores,
-          });
+
+          const activePlayers = room.players.filter((p) => !p.eliminated);
+          const nonWinners = activePlayers
+            .filter((p) => p.id !== msg.winnerId)
+            .sort((a, b) => a.score - b.score); // lowest score eliminated first
+          for (const p of nonWinners) {
+            p.eliminated = true;
+            room.eliminationOrder.push(p.id);
+          }
+          updateRoom(msg.roomCode, { players: room.players, eliminationOrder: room.eliminationOrder });
+          checkAndEndGame(msg.roomCode);
           break;
         }
 
@@ -447,8 +496,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           clearTurnTimer(msg.roomCode);
 
-          // Only carry over players who still have an active socket — anyone
-          // who disconnected during the game (or from the result screen) is dropped.
           const oldSockets = roomSockets.get(msg.roomCode);
           const connectedIds = new Set<string>();
           if (oldSockets) {
@@ -459,14 +506,10 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
           }
 
-          // Pick the new host: keep the original host if still connected,
-          // otherwise promote the first connected player in join order.
           const newHostId = connectedIds.has(oldRoom.hostId)
             ? oldRoom.hostId
             : (oldRoom.players.find((p) => connectedIds.has(p.id))?.id ?? oldRoom.hostId);
 
-          // Create a brand-new room so everything is clean (fixes custom-category
-          // sticking around and 2nd-game crashes from stale state)
           const newRoom = createRoom(
             newHostId,
             oldRoom.mode,
@@ -480,7 +523,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
           }
 
-          // Move all socket references from the old room to the new one
           if (oldSockets) {
             roomSockets.set(newRoom.code, new Set(oldSockets));
             roomSockets.delete(msg.roomCode);
@@ -504,7 +546,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "kick_player": {
           const room = getRoom(msg.roomCode);
           if (!room || room.hostId !== msg.hostId || room.status !== "waiting") return;
-          // Notify the kicked player before removing them
           const sockets = roomSockets.get(msg.roomCode);
           if (sockets) {
             for (const s of sockets) {
@@ -515,7 +556,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
           }
           removePlayerFromRoom(msg.roomCode, msg.targetId);
-          // Detach the kicked socket so it stops receiving heartbeats for this room
           if (sockets) {
             for (const s of sockets) {
               if (s.playerId === msg.targetId) {
@@ -542,7 +582,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
           if (wasHost && updated && updated.players.length > 0) {
             updateRoom(msg.roomCode, { hostId: updated.players[0].id });
           }
-          // Detach the leaving socket so it stops receiving heartbeats for this room
           const leavingSockets = roomSockets.get(msg.roomCode);
           if (leavingSockets) {
             for (const s of leavingSockets) {
@@ -569,7 +608,8 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
           clearTurnTimer(msg.roomCode);
           leavingPlayer.eliminated = true;
-          updateRoom(msg.roomCode, { players: room.players });
+          room.eliminationOrder.push(msg.playerId);
+          updateRoom(msg.roomCode, { players: room.players, eliminationOrder: room.eliminationOrder });
 
           if (!checkAndEndGame(msg.roomCode)) {
             const tsLeave = Date.now();
@@ -605,12 +645,10 @@ export function setupWebSocket(server: Server): WebSocketServer {
           if (!room) { sendToSocket(ws, { type: "error", message: "Room not found" }); return; }
           const rejoiningPlayer = room.players.find((p) => p.id === msg.playerId);
           if (!rejoiningPlayer) { sendToSocket(ws, { type: "error", message: "Player not found" }); return; }
-          // Re-attach this socket to the room
           ws.roomCode = msg.roomCode;
           ws.playerId = msg.playerId;
           if (!roomSockets.has(msg.roomCode)) roomSockets.set(msg.roomCode, new Set());
           roomSockets.get(msg.roomCode)!.add(ws);
-          // Send full game state so the rejoining client resyncs their timer and UI
           const tsSynced = currentTurnStartedAt.get(msg.roomCode) ?? Date.now();
           sendToSocket(ws, {
             type: "game_state_sync",
@@ -620,124 +658,92 @@ export function setupWebSocket(server: Server): WebSocketServer {
           break;
         }
 
-        case "ping":
-          break;
-
         case "update_room_settings": {
           const room = getRoom(msg.roomCode);
-          if (!room) return;
-          if (room.hostId !== msg.playerId) return;
-          if (room.status !== "waiting") return;
-          updateRoom(msg.roomCode, {
-            category: msg.category,
-            timeSeconds: msg.timeSeconds,
-          });
+          if (!room || room.hostId !== msg.playerId || room.status !== "waiting") return;
+          updateRoom(msg.roomCode, { category: msg.category, timeSeconds: msg.timeSeconds });
           broadcastAll(msg.roomCode, {
-            type: "room_settings_updated",
+            type: "lobby_sync",
             room: getRoom(msg.roomCode),
           });
           break;
         }
+
+        case "ping": break;
+
+        default: break;
       }
     });
 
     ws.on("close", () => {
-      const { roomCode, playerId } = ws;
+      const roomCode = ws.roomCode;
+      const playerId = ws.playerId;
       if (!roomCode || !playerId) return;
 
-      const sockets = roomSockets.get(roomCode);
-      if (sockets) {
-        sockets.delete(ws);
-        if (sockets.size === 0) roomSockets.delete(roomCode);
-      }
-
       const room = getRoom(roomCode);
-      if (!room) {
-        logger.info({ roomCode, playerId }, "WS client disconnected (no room)");
-        return;
-      }
+      if (!room) return;
 
       if (room.status === "playing") {
-        // During an active game: give the player a 5-second grace period to
-        // reconnect (tab switch, brief network blip) before eliminating them.
-        const player = room.players.find((p) => p.id === playerId);
-        if (player && !player.eliminated) {
-          const graceKey = `${roomCode}:${playerId}`;
-          clearDisconnectTimer(roomCode, playerId);
-          disconnectTimers.set(graceKey, setTimeout(() => {
-            disconnectTimers.delete(graceKey);
-            const r = getRoom(roomCode);
-            if (!r || r.status !== "playing") return;
-            const p = r.players.find((pl) => pl.id === playerId);
-            if (!p || p.eliminated) return; // already handled elsewhere
+        const key = `${roomCode}:${playerId}`;
+        if (disconnectTimers.has(key)) return;
+        const timer = setTimeout(() => {
+          disconnectTimers.delete(key);
+          const r = getRoom(roomCode);
+          if (!r || r.status !== "playing") return;
+          const p = r.players.find((pl) => pl.id === playerId);
+          if (!p || p.eliminated) return;
 
-            clearTurnTimer(roomCode);
-            p.eliminated = true;
-            updateRoom(roomCode, { players: r.players });
+          clearTurnTimer(roomCode);
+          p.eliminated = true;
+          r.eliminationOrder.push(playerId);
+          updateRoom(roomCode, { players: r.players, eliminationOrder: r.eliminationOrder });
 
-            if (!checkAndEndGame(roomCode)) {
+          if (!checkAndEndGame(roomCode)) {
+            if (r.currentPlayerId === playerId) {
+              const next = getNextPlayer(r);
+              updateRoom(roomCode, { currentPlayerId: next });
               const ts = Date.now();
               currentTurnStartedAt.set(roomCode, ts);
-              if (r.currentPlayerId === playerId) {
-                const nextPlayerId = getNextPlayer(r);
-                updateRoom(roomCode, { currentPlayerId: nextPlayerId });
-                broadcastAll(roomCode, {
-                  type: "player_eliminated",
-                  playerId,
-                  nextPlayerId,
-                  turnStartedAt: ts,
-                  room: getRoom(roomCode),
-                });
-                if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
-              } else {
-                broadcastAll(roomCode, {
-                  type: "player_eliminated",
-                  playerId,
-                  nextPlayerId: r.currentPlayerId,
-                  turnStartedAt: ts,
-                  room: getRoom(roomCode),
-                });
-                if (r.currentPlayerId) scheduleTurnTimeout(roomCode, r.currentPlayerId);
-              }
+              broadcastAll(roomCode, {
+                type: "player_eliminated",
+                playerId,
+                nextPlayerId: next,
+                turnStartedAt: ts,
+                room: getRoom(roomCode),
+              });
+              if (next) scheduleTurnTimeout(roomCode, next);
+            } else {
+              broadcastAll(roomCode, {
+                type: "player_left",
+                playerId,
+                room: getRoom(roomCode),
+              });
+              if (r.currentPlayerId) scheduleTurnTimeout(roomCode, r.currentPlayerId);
             }
-          }, 5_000));
-        }
+          }
+        }, 5_000);
+        disconnectTimers.set(key, timer);
       } else {
-        // Lobby or finished: remove the player normally
-        const wasHost = room.hostId === playerId;
-        removePlayerFromRoom(roomCode, playerId);
-
-        // Promote the next player if the host left
-        if (wasHost) {
-          const remaining = getRoom(roomCode)?.players ?? [];
-          if (remaining.length > 0) {
-            updateRoom(roomCode, { hostId: remaining[0].id });
+        const sockets = roomSockets.get(roomCode);
+        if (sockets) {
+          sockets.delete(ws);
+          if (room.status === "waiting") {
+            removePlayerFromRoom(roomCode, playerId);
+            const updated = getRoom(roomCode);
+            if (updated && updated.players.length === 0) {
+              clearLobbyInterval(roomCode);
+              deleteRoom(roomCode);
+            } else if (updated) {
+              if (updated.hostId === playerId && updated.players.length > 0) {
+                updateRoom(roomCode, { hostId: updated.players[0].id });
+              }
+              broadcastAll(roomCode, { type: "player_left", playerId, room: getRoom(roomCode) });
+            }
+          } else {
+            broadcastAll(roomCode, { type: "player_left", playerId, room: getRoom(roomCode) });
           }
         }
-
-        const afterLeave = getRoom(roomCode);
-        // Broadcast lobby_sync so all clients immediately converge
-        if (afterLeave && afterLeave.status === "waiting") {
-          broadcastAll(roomCode, { type: "lobby_sync", room: afterLeave });
-        } else {
-          broadcastAll(roomCode, {
-            type: "player_left",
-            playerId,
-            room: afterLeave,
-          });
-        }
-
-        // Clean up interval if the room is now empty
-        if (!afterLeave || afterLeave.players.length === 0) {
-          clearLobbyInterval(roomCode);
-        }
       }
-
-      logger.info({ roomCode, playerId }, "WS client disconnected");
-    });
-
-    ws.on("error", (err) => {
-      logger.error({ err }, "WS error");
     });
   });
 

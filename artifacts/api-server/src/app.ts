@@ -13,19 +13,19 @@ const app: Express = express();
 
 app.set("trust proxy", 1);
 
-app.use(
-  session({
-    secret: process.env["SESSION_SECRET"],
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    },
-  }),
-);
+export const sessionMiddleware = session({
+  secret: process.env["SESSION_SECRET"],
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false,
+    sameSite: "lax",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  },
+});
+
+app.use(sessionMiddleware);
 
 app.use(
   pinoHttp({

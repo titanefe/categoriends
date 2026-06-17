@@ -7,7 +7,7 @@ import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 export default function Result() {
   const { t } = useTranslation();
-  const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, disconnectWs, ws } = useGame();
+  const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, soloToken, setSoloToken, disconnectWs, ws } = useGame();
   const { user, refetch: refetchAuth } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -26,13 +26,16 @@ export default function Result() {
   const soloEloCalledRef = useRef(false);
 
   useEffect(() => {
-    if (!isSolo || !user || isCustom || soloEloCalledRef.current) return;
+    if (!isSolo || !user || soloEloCalledRef.current) return;
+    if (!soloToken) return;
     soloEloCalledRef.current = true;
+    const tokenToUse = soloToken;
+    setSoloToken(null);
     fetch("/api/elo/record-solo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ answerCount: score, roomCode: "SOLO", isCustom }),
+      body: JSON.stringify({ answerCount: score, roomCode: "SOLO", isCustom, token: tokenToUse }),
     })
       .then((r) => r.json())
       .then((data) => {
@@ -42,7 +45,7 @@ export default function Result() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [soloToken]);
 
   useEffect(() => {
     if (!ws || isSolo) return;

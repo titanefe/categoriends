@@ -62,8 +62,6 @@ export default function JoinRoom() {
           playerId,
           playerName: name.trim(),
           language: lang,
-          userId: user?.id ?? null,
-          elo: user?.elo ?? 1000,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryJoin, 100);
