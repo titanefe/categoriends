@@ -18,3 +18,5 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./rooms";
+export * from "./users";
+export * from "./elo_games";

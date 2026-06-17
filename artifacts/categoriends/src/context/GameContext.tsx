@@ -18,6 +18,7 @@ export interface Room {
   status: "waiting" | "playing" | "finished";
   subcategory: string;
   category: string;
+  customSubcategory?: boolean;
   language: Language;
   timeSeconds: number;
   turnOrder: string[];
@@ -44,6 +45,8 @@ interface GameContextType {
   setRoom: (r: Room | null) => void;
   gameState: GameState | null;
   setGameState: (gs: GameState | null) => void;
+  eloDeltas: Record<string, number> | null;
+  setEloDeltas: (d: Record<string, number> | null) => void;
   ws: WebSocket | null;
   connectWs: () => WebSocket;
   disconnectWs: () => void;
@@ -55,6 +58,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [player, setPlayerState] = useState<Player | null>(null);
   const [room, setRoomState] = useState<Room | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [eloDeltas, setEloDeltas] = useState<Record<string, number> | null>(null);
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -62,7 +66,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const playerRef = useRef<Player | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Prevents auto-reconnect when the user explicitly navigates away
   const preventReconnectRef = useRef(false);
 
   const setRoom = (r: Room | null) => {
@@ -91,8 +94,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 20_000);
   }
 
-  // Opens a fresh WS connection and sets up all handlers.
-  // onOpen is called once the connection is established.
   function openConnection(onOpen?: (ws: WebSocket) => void): WebSocket {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -110,7 +111,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         wsRef.current = null;
         setWsInstance(null);
       }
-      // Auto-reconnect only during an active game and when not explicitly leaving
       if (preventReconnectRef.current) return;
       const r = roomRef.current;
       const p = playerRef.current;
@@ -125,7 +125,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }
 
   function scheduleReconnect() {
-    if (reconnectTimerRef.current) return; // already pending
+    if (reconnectTimerRef.current) return;
     reconnectTimerRef.current = setTimeout(() => {
       reconnectTimerRef.current = null;
       if (preventReconnectRef.current) return;
@@ -135,7 +135,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) return;
 
       openConnection((ws) => {
-        // Re-join the room so the server restores our slot
         const r2 = roomRef.current;
         const p2 = playerRef.current;
         if (r2 && p2) {
@@ -147,7 +146,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }, 1_500);
   }
 
-  // Reconnect immediately when the tab regains focus and the socket is dead
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden || preventReconnectRef.current) return;
@@ -186,7 +184,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       wsRef.current = null;
       setWsInstance(null);
     }
-    // Re-enable reconnect shortly after (so "play again" still works)
     setTimeout(() => { preventReconnectRef.current = false; }, 300);
   };
 
@@ -195,6 +192,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       player, setPlayer,
       room, setRoom,
       gameState, setGameState,
+      eloDeltas, setEloDeltas,
       ws: wsInstance,
       connectWs, disconnectWs,
     }}>

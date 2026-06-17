@@ -9,7 +9,7 @@ type GameOverOverlay = { winnerName: string } | null;
 
 export default function GameScreen() {
   const { t, lang } = useTranslation();
-  const { player, room, gameState, setGameState, setRoom, ws } = useGame();
+  const { player, room, gameState, setGameState, setRoom, setEloDeltas, ws } = useGame();
   const [, setLocation] = useLocation();
   const verifyMutation = useVerifyAnswer();
 
@@ -217,6 +217,7 @@ export default function GameScreen() {
         }
         if (data.type === "game_over") {
           if (timerRef.current) clearInterval(timerRef.current);
+          setEloDeltas(data.eloDeltas ?? null);
           setGameOverOverlay({ winnerName: data.winnerName ?? "Nobody" });
           setTimeout(() => setLocation("/result"), 2200);
         }

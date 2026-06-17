@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type Room, type Player } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function JoinRoom() {
   const { t, lang } = useTranslation();
+  const { user } = useAuth();
   const { setRoom, setPlayer, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [code, setCode] = useState("");
@@ -60,6 +62,8 @@ export default function JoinRoom() {
           playerId,
           playerName: name.trim(),
           language: lang,
+          userId: user?.id ?? null,
+          elo: user?.elo ?? 1000,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryJoin, 100);

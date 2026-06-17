@@ -161,6 +161,7 @@ export default function RoomLobby() {
         type: "start_game",
         roomCode: room.code,
         subcategory: room.category,
+        customSubcategory: true,
       }));
       return;
     }
@@ -173,6 +174,7 @@ export default function RoomLobby() {
             type: "start_game",
             roomCode: room.code,
             subcategory: result.subcategory,
+            customSubcategory: false,
           }));
         },
       }

@@ -2,14 +2,18 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
+import AuthModal from "@/components/AuthModal";
 
 export default function Home() {
   const { t, lang, setLang } = useTranslation();
   const { setRoom } = useGame();
+  const { user, loading: authLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
   const [showHowTo, setShowHowTo] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   function handleSolo() {
     setRoom(null);
@@ -35,15 +39,34 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 relative overflow-hidden">
-      {/* Background glow */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute bottom-1/4 left-1/4 w-64 h-64 rounded-full bg-accent/8 blur-3xl" />
       </div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
-        {/* Top controls — language + theme */}
+        {/* Top controls */}
         <div className="w-full flex justify-end gap-2">
+          {!authLoading && (
+            <button
+              data-testid="button-auth"
+              onClick={() => setShowAuth(true)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-all active:scale-[0.98] ${
+                user
+                  ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary"
+                  : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary"
+              }`}
+            >
+              {user ? (
+                <>
+                  <span className="text-xs font-mono">{user.username}</span>
+                  <span className="text-xs font-mono text-primary/70">{user.elo}</span>
+                </>
+              ) : (
+                <span>{t("auth.loginToTrackElo")}</span>
+              )}
+            </button>
+          )}
           <button
             data-testid="theme-toggle"
             onClick={toggleTheme}
@@ -118,7 +141,7 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Footer — contact */}
+        {/* Footer */}
         <div className="text-center">
           <p className="text-muted-foreground/40 text-xs font-mono">
             v1.0 &mdash; real-time word battles
@@ -132,7 +155,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* How to Play modal */}
       {showHowTo && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm"
@@ -165,6 +187,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
     </div>
   );
 }

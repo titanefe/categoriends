@@ -3,6 +3,8 @@ export interface Player {
   name: string;
   score: number;
   eliminated: boolean;
+  userId: string | null;
+  elo: number;
 }
 
 export interface Room {
@@ -12,6 +14,7 @@ export interface Room {
   language: "en" | "tr";
   category: string;
   subcategory: string;
+  customSubcategory: boolean;
   status: "waiting" | "playing" | "finished";
   players: Player[];
   acceptedAnswers: string[];
@@ -50,6 +53,7 @@ export function createRoom(
     language,
     category,
     subcategory: "",
+    customSubcategory: false,
     status: "waiting",
     players: [],
     acceptedAnswers: [],

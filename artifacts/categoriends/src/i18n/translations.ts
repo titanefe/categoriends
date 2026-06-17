@@ -108,6 +108,20 @@ const en: TranslationKeys = {
   "category.Geography": "Geography",
   "category.Animals": "Animals",
   "category.General Knowledge": "General Knowledge",
+  "auth.loginTitle": "Sign In",
+  "auth.registerTitle": "Register",
+  "auth.username": "Username",
+  "auth.password": "Password",
+  "auth.loginBtn": "Sign In",
+  "auth.registerBtn": "Create Account",
+  "auth.logout": "Sign Out",
+  "auth.loggedInAs": "Signed in as",
+  "auth.elo": "Elo",
+  "auth.loginToTrackElo": "Sign in to track your Elo",
+  "elo.gained": "+{n} Elo",
+  "elo.lost": "{n} Elo",
+  "elo.noRating": "Custom category — no Elo change",
+  "elo.new": "New Elo: {n}",
 };
 
 const tr: TranslationKeys = {
@@ -212,6 +226,20 @@ const tr: TranslationKeys = {
   "category.Geography": "Coğrafya",
   "category.Animals": "Hayvanlar",
   "category.General Knowledge": "Genel Kültür",
+  "auth.loginTitle": "Giriş Yap",
+  "auth.registerTitle": "Kayıt Ol",
+  "auth.username": "Kullanıcı Adı",
+  "auth.password": "Şifre",
+  "auth.loginBtn": "Giriş Yap",
+  "auth.registerBtn": "Hesap Oluştur",
+  "auth.logout": "Çıkış Yap",
+  "auth.loggedInAs": "Giriş yapıldı:",
+  "auth.elo": "Elo",
+  "auth.loginToTrackElo": "Elo takibi için giriş yap",
+  "elo.gained": "+{n} Elo",
+  "elo.lost": "{n} Elo",
+  "elo.noRating": "Özel kategori — Elo değişmez",
+  "elo.new": "Yeni Elo: {n}",
 };
 
 const translations = { en, tr };

@@ -1,11 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
+import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 export default function Result() {
   const { t } = useTranslation();
-  const { room, gameState, player, setRoom, setGameState, disconnectWs, ws } = useGame();
+  const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, disconnectWs, ws } = useGame();
+  const { user, refetch: refetchAuth } = useAuth();
   const [, setLocation] = useLocation();
 
   const isSolo = room?.mode === "solo";
@@ -15,9 +18,32 @@ export default function Result() {
   const allPlayers = room?.players ?? [];
   const sorted = [...allPlayers].sort((a, b) => b.score - a.score);
   const winner = isSolo ? player : sorted[0];
-  const isHost = player?.id === room?.hostId;
 
-  // Listen for room_reset and player_left (multiplayer)
+  const allPresets = [...MAIN_CATEGORIES_EN, ...MAIN_CATEGORIES_TR];
+  const isCustom = room?.customSubcategory ?? (room ? !allPresets.includes(room.category) : false);
+
+  const [soloEloResult, setSoloEloResult] = useState<{ delta: number; eloAfter: number } | null>(null);
+  const soloEloCalledRef = useRef(false);
+
+  useEffect(() => {
+    if (!isSolo || !user || isCustom || soloEloCalledRef.current) return;
+    soloEloCalledRef.current = true;
+    fetch("/api/elo/record-solo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ answerCount: score, roomCode: "SOLO", isCustom }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.delta !== undefined && data.eloAfter !== undefined) {
+          setSoloEloResult({ delta: data.delta, eloAfter: data.eloAfter });
+          refetchAuth();
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!ws || isSolo) return;
     const handleMsg = (evt: MessageEvent) => {
@@ -26,9 +52,9 @@ export default function Result() {
         if (data.type === "room_reset" && data.room) {
           setRoom(data.room);
           setGameState(null);
+          setEloDeltas(null);
           setLocation(`/room/${data.room.code}`);
         }
-        // Keep room in sync so host promotion is reflected immediately
         if (data.type === "player_left" && data.room) {
           setRoom(data.room);
         }
@@ -36,18 +62,33 @@ export default function Result() {
     };
     ws.addEventListener("message", handleMsg);
     return () => ws.removeEventListener("message", handleMsg);
-  }, [ws, isSolo, setRoom, setGameState, setLocation]);
+  }, [ws, isSolo, setRoom, setGameState, setEloDeltas, setLocation]);
 
   function handlePlayAgain() {
     disconnectWs();
     setRoom(null);
     setGameState(null);
+    setEloDeltas(null);
     setLocation("/");
   }
 
   function handleReturnToLobby() {
     if (!ws || !room) return;
     ws.send(JSON.stringify({ type: "reset_room", roomCode: room.code }));
+  }
+
+  function EloDeltaBadge({ delta }: { delta: number }) {
+    if (delta === 0) return null;
+    const positive = delta > 0;
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold font-mono border ${
+        positive
+          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400"
+          : "bg-destructive/15 border-destructive/40 text-destructive"
+      }`}>
+        {positive ? "+" : ""}{delta}
+      </span>
+    );
   }
 
   return (
@@ -88,6 +129,21 @@ export default function Result() {
                       <span className="text-foreground/80">{subcategory}</span>
                     </p>
                   )}
+                  {user && !isCustom && soloEloResult && (
+                    <div className="mt-4 flex items-center justify-center gap-2">
+                      <span className="text-xs text-muted-foreground font-mono">{t("auth.elo")}</span>
+                      <EloDeltaBadge delta={soloEloResult.delta} />
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {t("elo.new").replace("{n}", String(soloEloResult.eloAfter))}
+                      </span>
+                    </div>
+                  )}
+                  {user && isCustom && (
+                    <p className="text-xs text-muted-foreground/50 font-mono mt-3">{t("elo.noRating")}</p>
+                  )}
+                  {!user && (
+                    <p className="text-xs text-muted-foreground/50 font-mono mt-3">{t("auth.loginToTrackElo")}</p>
+                  )}
                 </>
               )}
             </div>
@@ -100,30 +156,38 @@ export default function Result() {
                 {t("result.finalScores")}
               </p>
               <div className="flex flex-col gap-2">
-                {sorted.map((p, idx) => (
-                  <div
-                    key={p.id}
-                    data-testid={`row-score-${p.id}`}
-                    className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-                      idx === 0 ? "bg-primary/10 border border-primary/30" : "border border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}.</span>
-                      <span className={`text-sm font-medium ${p.eliminated ? "line-through text-muted-foreground/50" : ""}`}>
-                        {p.name}
-                      </span>
+                {sorted.map((p, idx) => {
+                  const delta = eloDeltas ? (eloDeltas[p.id] ?? null) : null;
+                  return (
+                    <div
+                      key={p.id}
+                      data-testid={`row-score-${p.id}`}
+                      className={`flex items-center justify-between py-2 px-3 rounded-lg ${
+                        idx === 0 ? "bg-primary/10 border border-primary/30" : "border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}.</span>
+                        <span className={`text-sm font-medium ${p.eliminated ? "line-through text-muted-foreground/50" : ""}`}>
+                          {p.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {delta !== null && <EloDeltaBadge delta={delta} />}
+                        <span className={`text-sm font-bold font-mono ${idx === 0 ? "text-primary" : "text-muted-foreground"}`}>
+                          {p.score}
+                        </span>
+                      </div>
                     </div>
-                    <span className={`text-sm font-bold font-mono ${idx === 0 ? "text-primary" : "text-muted-foreground"}`}>
-                      {p.score}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+              {!user && (
+                <p className="text-xs text-muted-foreground/50 font-mono mt-3 text-center">{t("auth.loginToTrackElo")}</p>
+              )}
             </div>
           )}
 
-          {/* Multiplayer: everyone can return to lobby */}
           {!isSolo && (
             <button
               data-testid="button-return-lobby"

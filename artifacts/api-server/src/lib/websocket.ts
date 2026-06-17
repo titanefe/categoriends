@@ -1,6 +1,10 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
 import type { Server } from "http";
+import { randomUUID } from "crypto";
+import { eq } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { usersTable, eloGamesTable } from "@workspace/db/schema";
 import {
   createRoom,
   getRoom,
@@ -12,6 +16,7 @@ import {
   type Player,
   type Room,
 } from "./roomStore";
+import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
 
 interface ExtWebSocket extends WebSocket {
@@ -20,11 +25,11 @@ interface ExtWebSocket extends WebSocket {
 }
 
 type WSMessage =
-  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number }
-  | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string }
+  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number; userId?: string | null; elo?: number }
+  | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string; userId?: string | null; elo?: number }
   | { type: "rejoin"; roomCode: string; playerId: string }
   | { type: "ping" }
-  | { type: "start_game"; roomCode: string; subcategory: string }
+  | { type: "start_game"; roomCode: string; subcategory: string; customSubcategory?: boolean }
   | { type: "answer_submitted"; roomCode: string; playerId: string; answer: string; valid: boolean; reason: string }
   | { type: "player_eliminated"; roomCode: string; playerId: string }
   | { type: "next_turn"; roomCode: string }
@@ -130,6 +135,30 @@ function sendToSocket(ws: WebSocket, message: object): void {
   }
 }
 
+async function persistEloDeltas(room: Room, deltaMap: Map<string, number>): Promise<void> {
+  for (const p of room.players) {
+    if (!p.userId) continue;
+    const delta = deltaMap.get(p.id) ?? 0;
+    try {
+      const rows = await db.select().from(usersTable).where(eq(usersTable.id, p.userId));
+      const user = rows[0];
+      if (!user) continue;
+      const eloAfter = Math.max(0, user.elo + delta);
+      await db.update(usersTable).set({ elo: eloAfter }).where(eq(usersTable.id, p.userId));
+      await db.insert(eloGamesTable).values({
+        id: randomUUID(),
+        userId: p.userId,
+        mode: room.mode,
+        delta,
+        eloAfter,
+        roomCode: room.code,
+      });
+    } catch (err) {
+      logger.error({ err }, "Elo persist error");
+    }
+  }
+}
+
 function checkAndEndGame(roomCode: string): boolean {
   const room = getRoom(roomCode);
   if (!room || room.status !== "playing") return false;
@@ -138,11 +167,35 @@ function checkAndEndGame(roomCode: string): boolean {
     const winner = activePlayers[0] ?? null;
     updateRoom(roomCode, { status: "finished" });
     const scores = room.players.map((p) => ({ id: p.id, name: p.name, score: p.score }));
+
+    const eloDeltas: Record<string, number> = {};
+    const playersWithUserId = room.players.filter((p) => p.userId);
+    if (playersWithUserId.length >= 2 && !room.customSubcategory) {
+      const sorted = [...room.players].sort((a, b) => b.score - a.score);
+      let deltaMap: Map<string, number>;
+      if (room.mode === "duel" && room.players.length === 2) {
+        const [p1, p2] = sorted;
+        deltaMap = new Map([
+          [p1.id, duelEloDelta(p1.elo, p2.elo, p1.score >= p2.score)],
+          [p2.id, duelEloDelta(p2.elo, p1.elo, p2.score > p1.score)],
+        ]);
+      } else {
+        deltaMap = partyEloDeltas(
+          sorted.map((p, idx) => ({ id: p.id, elo: p.elo, rank: idx + 1 })),
+        );
+      }
+      for (const [id, delta] of deltaMap) {
+        eloDeltas[id] = delta;
+      }
+      void persistEloDeltas(room, deltaMap);
+    }
+
     broadcastAll(roomCode, {
       type: "game_over",
       winnerId: winner?.id ?? null,
       winnerName: winner?.name ?? "Nobody",
       scores,
+      eloDeltas,
     });
     return true;
   }
@@ -172,6 +225,8 @@ export function setupWebSocket(server: Server): WebSocketServer {
             name: msg.playerName,
             score: 0,
             eliminated: false,
+            userId: msg.userId ?? null,
+            elo: msg.elo ?? 1000,
           };
           addPlayerToRoom(room.code, player);
           ws.roomCode = room.code;
@@ -215,6 +270,8 @@ export function setupWebSocket(server: Server): WebSocketServer {
             name: msg.playerName,
             score: 0,
             eliminated: false,
+            userId: msg.userId ?? null,
+            elo: msg.elo ?? 1000,
           };
 
           ws.roomCode = msg.roomCode;
@@ -259,6 +316,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           updateRoom(msg.roomCode, {
             status: "playing",
             subcategory: msg.subcategory,
+            customSubcategory: msg.customSubcategory ?? false,
             acceptedAnswers: [],
             turnOrder,
             currentPlayerId: firstPlayerId,

@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type GameMode, type Room, type Player } from "@/context/GameContext";
+import { useAuth } from "@/context/AuthContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
+  const { user } = useAuth();
   const { setRoom, setPlayer, room, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<GameMode>("duel");
@@ -59,6 +61,8 @@ export default function CreateRoom() {
           language: lang,
           category,
           timeSeconds,
+          userId: user?.id ?? null,
+          elo: user?.elo ?? 1000,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryCreate, 100);
