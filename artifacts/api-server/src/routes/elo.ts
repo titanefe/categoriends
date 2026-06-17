@@ -42,15 +42,15 @@ router.post("/elo/record-solo", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Not logged in." });
     return;
   }
-  const { answerCount, roomCode, isCustom, token } = req.body ?? {};
+  const { answerCount, roomCode, isCustom, token, timeSeconds } = req.body ?? {};
 
   if (!token || typeof token !== "string" || token !== req.session.soloToken) {
     res.status(400).json({ error: "Invalid or expired game token." });
     return;
   }
 
-  if (typeof answerCount !== "number") {
-    res.status(400).json({ error: "answerCount required." });
+  if (typeof answerCount !== "number" || typeof timeSeconds !== "number" || timeSeconds <= 0) {
+    res.status(400).json({ error: "answerCount and timeSeconds required." });
     return;
   }
 
@@ -67,7 +67,7 @@ router.post("/elo/record-solo", async (req, res): Promise<void> => {
       res.status(404).json({ error: "User not found." });
       return;
     }
-    const delta = soloEloDelta(user.elo, answerCount);
+    const delta = soloEloDelta(user.elo, answerCount, timeSeconds);
     const eloAfter = Math.max(0, user.elo + delta);
     await db.update(usersTable).set({ elo: eloAfter }).where(eq(usersTable.id, userId));
     await db.insert(eloGamesTable).values({

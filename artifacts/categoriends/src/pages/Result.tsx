@@ -14,6 +14,7 @@ export default function Result() {
   const isSolo = room?.mode === "solo";
   const score = isSolo ? (gameState?.acceptedAnswers.length ?? 0) : 0;
   const subcategory = gameState?.subcategory ?? "";
+  const timeSeconds = room?.timeSeconds ?? 15;
 
   const allPlayers = room?.players ?? [];
   const sorted = [...allPlayers].sort((a, b) => b.score - a.score);
@@ -35,7 +36,7 @@ export default function Result() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ answerCount: score, roomCode: "SOLO", isCustom, token: tokenToUse }),
+      body: JSON.stringify({ answerCount: score, roomCode: "SOLO", isCustom, token: tokenToUse, timeSeconds }),
     })
       .then((r) => r.json())
       .then((data) => {

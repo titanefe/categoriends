@@ -182,8 +182,8 @@ function checkAndEndGame(roomCode: string): boolean {
         const loserPlayer = room.players.find((p) => p.id === loserId);
         if (winnerPlayer && loserPlayer) {
           deltaMap = new Map([
-            [winnerId, duelEloDelta(winnerPlayer.elo, loserPlayer.elo, true)],
-            [loserId, duelEloDelta(loserPlayer.elo, winnerPlayer.elo, false)],
+            [winnerId, duelEloDelta(winnerPlayer.elo, loserPlayer.elo, true, room.timeSeconds)],
+            [loserId, duelEloDelta(loserPlayer.elo, winnerPlayer.elo, false, room.timeSeconds)],
           ]);
         } else {
           deltaMap = new Map();
@@ -194,6 +194,7 @@ function checkAndEndGame(roomCode: string): boolean {
             const p = room.players.find((pl) => pl.id === id)!;
             return { id, elo: p.elo, rank: idx + 1 };
           }),
+          room.timeSeconds,
         );
       }
       for (const [id, delta] of deltaMap) {
