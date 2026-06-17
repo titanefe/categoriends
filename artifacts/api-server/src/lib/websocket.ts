@@ -44,6 +44,9 @@ const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // Disconnect grace-period timers: give players 5 s to reconnect before eliminating.
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Lobby heartbeat intervals — broadcast full room state every 3 s while waiting.
+const lobbyIntervals = new Map<string, ReturnType<typeof setInterval>>();
+
 // Tracks when the current turn started (per room) so rejoining clients can resync their timer.
 const currentTurnStartedAt = new Map<string, number>();
 
@@ -56,6 +59,21 @@ function clearDisconnectTimer(roomCode: string, playerId: string): void {
   const key = `${roomCode}:${playerId}`;
   const t = disconnectTimers.get(key);
   if (t !== undefined) { clearTimeout(t); disconnectTimers.delete(key); }
+}
+
+function clearLobbyInterval(roomCode: string): void {
+  const i = lobbyIntervals.get(roomCode);
+  if (i !== undefined) { clearInterval(i); lobbyIntervals.delete(roomCode); }
+}
+
+function startLobbyInterval(roomCode: string): void {
+  clearLobbyInterval(roomCode); // avoid duplicate intervals
+  const interval = setInterval(() => {
+    const r = getRoom(roomCode);
+    if (!r || r.status !== "waiting") { clearLobbyInterval(roomCode); return; }
+    broadcastAll(roomCode, { type: "lobby_sync", room: r });
+  }, 3_000);
+  lobbyIntervals.set(roomCode, interval);
 }
 
 function scheduleTurnTimeout(roomCode: string, playerId: string): void {
@@ -168,6 +186,8 @@ export function setupWebSocket(server: Server): WebSocketServer {
             type: "room_created",
             room: getRoom(room.code),
           });
+
+          startLobbyInterval(room.code);
           break;
         }
 
@@ -212,17 +232,21 @@ export function setupWebSocket(server: Server): WebSocketServer {
             room: getRoom(msg.roomCode),
           });
 
+          // Broadcast full room state to everyone so all clients converge immediately
           broadcastAll(msg.roomCode, {
-            type: "player_joined",
-            player,
+            type: "lobby_sync",
             room: getRoom(msg.roomCode),
           });
+
+          startLobbyInterval(msg.roomCode);
           break;
         }
 
         case "start_game": {
           const room = getRoom(msg.roomCode);
           if (!room) return;
+
+          clearLobbyInterval(msg.roomCode);
 
           // Shuffle player order so the first player is random
           const turnOrder = [...room.players.map((p) => p.id)];
@@ -294,6 +318,11 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "player_eliminated": {
           const room = getRoom(msg.roomCode);
           if (!room || room.status !== "playing") return;
+
+          // Guard: discard stale eliminations — if the turn already moved on
+          // (because the player submitted a valid answer just before time ran out),
+          // room.currentPlayerId will no longer point to msg.playerId.
+          if (room.currentPlayerId !== msg.playerId) return;
 
           const player = room.players.find((p) => p.id === msg.playerId);
           // Idempotent — ignore if already eliminated or not found
@@ -402,12 +431,15 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
           }
 
+          clearLobbyInterval(msg.roomCode);
           deleteRoom(msg.roomCode);
 
           broadcastAll(newRoom.code, {
             type: "room_reset",
             room: getRoom(newRoom.code),
           });
+
+          startLobbyInterval(newRoom.code);
           break;
         }
 
@@ -426,8 +458,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
           }
           removePlayerFromRoom(msg.roomCode, msg.targetId);
           broadcastAll(msg.roomCode, {
-            type: "player_left",
-            playerId: msg.targetId,
+            type: "lobby_sync",
             room: getRoom(msg.roomCode),
           });
           break;
@@ -443,8 +474,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             updateRoom(msg.roomCode, { hostId: updated.players[0].id });
           }
           broadcastAll(msg.roomCode, {
-            type: "player_left",
-            playerId: msg.playerId,
+            type: "lobby_sync",
             room: getRoom(msg.roomCode),
           });
           break;
@@ -604,11 +634,22 @@ export function setupWebSocket(server: Server): WebSocketServer {
           }
         }
 
-        broadcastAll(roomCode, {
-          type: "player_left",
-          playerId,
-          room: getRoom(roomCode),
-        });
+        const afterLeave = getRoom(roomCode);
+        // Broadcast lobby_sync so all clients immediately converge
+        if (afterLeave && afterLeave.status === "waiting") {
+          broadcastAll(roomCode, { type: "lobby_sync", room: afterLeave });
+        } else {
+          broadcastAll(roomCode, {
+            type: "player_left",
+            playerId,
+            room: afterLeave,
+          });
+        }
+
+        // Clean up interval if the room is now empty
+        if (!afterLeave || afterLeave.players.length === 0) {
+          clearLobbyInterval(roomCode);
+        }
       }
 
       logger.info({ roomCode, playerId }, "WS client disconnected");
