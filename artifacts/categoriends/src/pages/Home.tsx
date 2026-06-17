@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function Home() {
   const { t, lang, setLang } = useTranslation();
   const { setRoom } = useGame();
+  const { theme, toggleTheme } = useTheme();
   const [, setLocation] = useLocation();
   const [showHowTo, setShowHowTo] = useState(false);
 
@@ -40,8 +42,24 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center gap-8">
-        {/* Language toggle — prominent */}
-        <div className="w-full flex justify-end">
+        {/* Top controls — language + theme */}
+        <div className="w-full flex justify-end gap-2">
+          <button
+            data-testid="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex items-center justify-center w-10 h-10 rounded-xl border border-primary/50 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary active:scale-[0.98] transition-all"
+          >
+            {theme === "dark" ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+              </svg>
+            )}
+          </button>
           <button
             data-testid="lang-toggle"
             onClick={() => setLang(lang === "en" ? "tr" : "en")}
