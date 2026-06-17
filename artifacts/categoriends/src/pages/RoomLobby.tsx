@@ -91,7 +91,7 @@ export default function RoomLobby() {
     const handleMsg = (evt: MessageEvent) => {
       try {
         const data = JSON.parse(evt.data);
-        if (data.type === "lobby_sync" && data.room) setRoom(data.room as Room);
+        if (data.type === "lobby_sync" && data.room?.code === code) setRoom(data.room as Room);
         if (data.type === "player_joined" && data.room) setRoom(data.room as Room);
         if (data.type === "player_left" && data.room) setRoom(data.room as Room);
         if (data.type === "player_kicked") {

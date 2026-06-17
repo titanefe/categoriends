@@ -457,6 +457,17 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
           }
           removePlayerFromRoom(msg.roomCode, msg.targetId);
+          // Detach the kicked socket so it stops receiving heartbeats for this room
+          if (sockets) {
+            for (const s of sockets) {
+              if (s.playerId === msg.targetId) {
+                sockets.delete(s);
+                s.roomCode = undefined;
+                s.playerId = undefined;
+                break;
+              }
+            }
+          }
           broadcastAll(msg.roomCode, {
             type: "lobby_sync",
             room: getRoom(msg.roomCode),
@@ -472,6 +483,18 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const updated = getRoom(msg.roomCode);
           if (wasHost && updated && updated.players.length > 0) {
             updateRoom(msg.roomCode, { hostId: updated.players[0].id });
+          }
+          // Detach the leaving socket so it stops receiving heartbeats for this room
+          const leavingSockets = roomSockets.get(msg.roomCode);
+          if (leavingSockets) {
+            for (const s of leavingSockets) {
+              if (s.playerId === msg.playerId) {
+                leavingSockets.delete(s);
+                s.roomCode = undefined;
+                s.playerId = undefined;
+                break;
+              }
+            }
           }
           broadcastAll(msg.roomCode, {
             type: "lobby_sync",
