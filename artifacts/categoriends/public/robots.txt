@@ -1,5 +1,7 @@
 User-agent: *
 Allow: /
+Allow: /room/create
+Allow: /room/join
 Disallow: /game
 Disallow: /result
 Disallow: /room/

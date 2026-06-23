@@ -109,13 +109,14 @@ export default function Home() {
 
         {/* Action buttons */}
         <div className="w-full flex flex-col gap-3">
-          <button
+          <a
+            href="/daily"
             data-testid="button-daily"
-            onClick={() => setLocation("/daily")}
-            className="w-full py-4 rounded-xl font-semibold text-lg border border-accent/50 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent active:scale-[0.98] transition-all"
+            onClick={(e) => { e.preventDefault(); setLocation("/daily"); }}
+            className="w-full py-4 rounded-xl font-semibold text-lg border border-accent/50 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent active:scale-[0.98] transition-all text-center block"
           >
             {t("home.daily")}
-          </button>
+          </a>
 
           <button
             data-testid="button-solo"
