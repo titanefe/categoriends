@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import type { Connect } from "vite";
 
 const rawPort = process.env.PORT;
 
@@ -26,9 +27,33 @@ if (!basePath) {
   );
 }
 
+function localeHtmlRewrite() {
+  const middleware: Connect.NextHandleFunction = (req, _res, next) => {
+    const url = req.url ?? "";
+    const urlPath = url.split("?")[0].split("#")[0];
+    const qs = url.includes("?") ? url.slice(url.indexOf("?")) : "";
+    if (urlPath === "/tr" || urlPath.startsWith("/tr/")) {
+      req.url = "/tr.html" + qs;
+    } else if (urlPath === "/en" || urlPath.startsWith("/en/")) {
+      req.url = "/en.html" + qs;
+    }
+    next();
+  };
+  return {
+    name: "locale-html-rewrite",
+    configureServer(server: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
   plugins: [
+    localeHtmlRewrite(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
@@ -57,6 +82,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(import.meta.dirname, "index.html"),
+        en: path.resolve(import.meta.dirname, "en.html"),
+        tr: path.resolve(import.meta.dirname, "tr.html"),
+      },
+    },
   },
   server: {
     port,

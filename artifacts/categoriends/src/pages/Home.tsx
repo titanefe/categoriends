@@ -85,7 +85,11 @@ export default function Home() {
           </button>
           <button
             data-testid="lang-toggle"
-            onClick={() => setLang(lang === "en" ? "tr" : "en")}
+            onClick={() => {
+              const newLang = lang === "en" ? "tr" : "en";
+              setLang(newLang);
+              setLocation(newLang === "tr" ? "/tr" : "/en");
+            }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary/50 bg-primary/10 text-primary font-semibold text-sm hover:bg-primary/20 hover:border-primary active:scale-[0.98] transition-all"
           >
             <span className="text-base">{lang === "en" ? "🇹🇷" : "🇬🇧"}</span>
@@ -110,9 +114,9 @@ export default function Home() {
         {/* Action buttons */}
         <div className="w-full flex flex-col gap-3">
           <a
-            href="/daily"
+            href={lang === "tr" ? "/tr/daily" : "/en/daily"}
             data-testid="button-daily"
-            onClick={(e) => { e.preventDefault(); setLocation("/daily"); }}
+            onClick={(e) => { e.preventDefault(); setLocation(lang === "tr" ? "/tr/daily" : "/en/daily"); }}
             className="w-full py-4 rounded-xl font-semibold text-lg border border-accent/50 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent active:scale-[0.98] transition-all text-center block"
           >
             {t("home.daily")}

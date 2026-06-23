@@ -4,27 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
 
-    <!-- Dynamic title/lang before React hydrates — bots & first paint get the right value -->
-    <script>
-      (function () {
-        var lang = localStorage.getItem("categoriends_lang") || "en";
-        var titles = {
-          en: "Categoriends - Online Category Game & Words Trivia",
-          tr: "Categoriends - Online Kategori Oyunu & Kelime Yarışması"
-        };
-        document.title = titles[lang] || titles.en;
-        document.documentElement.lang = lang;
-      })();
-    </script>
-
-    <meta name="description" content="Categoriends: Fun online games to play with friends! En iyi İngilizce kelime oyunu ve category game deneyimi. Arkadaşlarınla 4 kişilik oyun kur ve yarış!" />
+    <meta name="description" content="Play Categoriends with friends! Name things in a category before time runs out. Solo, 1v1 duel, or party mode." />
     <meta name="keywords" content="category game, word game, multiplayer, trivia, party game, online game, kelime oyunu, kategori oyunu, çok oyunculu" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://categoriends.replit.app/" />
 
+    <!-- hreflang annotations — each language version has a stable crawlable URL -->
+    <link rel="alternate" hreflang="x-default" href="https://categoriends.replit.app/" />
+    <link rel="alternate" hreflang="en" href="https://categoriends.replit.app/en" />
+    <link rel="alternate" hreflang="tr" href="https://categoriends.replit.app/tr" />
+
     <!-- Open Graph -->
-    <meta property="og:title" content="Categoriends - Online Category Game & Words Trivia" />
-    <meta property="og:description" content="Categoriends: Fun online games to play with friends! En iyi İngilizce kelime oyunu ve category game deneyimi. Arkadaşlarınla 4 kişilik oyun kur ve yarış!" />
+    <meta property="og:title" content="Categoriends - Online Category Game &amp; Words Trivia" />
+    <meta property="og:description" content="Play Categoriends with friends! Name things in a category before time runs out. Solo, 1v1 duel, or party mode." />
     <meta property="og:image" content="https://categoriends.replit.app/opengraph.jpg" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://categoriends.replit.app/" />
@@ -33,8 +25,48 @@
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Categoriends - Online Category Game & Words Trivia" />
-    <meta name="twitter:description" content="Categoriends: Fun online games to play with friends! En iyi İngilizce kelime oyunu ve category game deneyimi. Arkadaşlarınla 4 kişilik oyun kur ve yarış!" />
+    <meta name="twitter:title" content="Categoriends - Online Category Game &amp; Words Trivia" />
+    <meta name="twitter:description" content="Play Categoriends with friends! Name things in a category before time runs out. Solo, 1v1 duel, or party mode." />
+
+    <!-- Locale detection from URL path — runs after meta elements exist in DOM -->
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        var isTr = path === "/tr" || path.startsWith("/tr/");
+        var isEn = path === "/en" || path.startsWith("/en/");
+        var lang = isTr ? "tr" : (isEn ? "en" : (localStorage.getItem("categoriends_lang") || "en"));
+
+        var titles = {
+          en: "Categoriends - Online Category Game & Words Trivia",
+          tr: "Categoriends - Online Kategori Oyunu & Kelime Yarışması"
+        };
+        var descs = {
+          en: "Play Categoriends with friends! Name things in a category before time runs out. Solo, 1v1 duel, or party mode.",
+          tr: "Categoriends'i arkadaşlarınla oyna! Süre dolmadan kategorideki şeyleri say. Solo, 1v1 düello veya parti modu."
+        };
+        var locales = { en: "en_US", tr: "tr_TR" };
+        var base = "https://categoriends.replit.app";
+
+        var canonicalPath = path.replace(/\/$/, "") || "/";
+
+        document.title = titles[lang] || titles.en;
+        document.documentElement.lang = lang;
+
+        function setMeta(sel, attr, val) {
+          var el = document.querySelector(sel);
+          if (el) el.setAttribute(attr, val);
+        }
+
+        setMeta('meta[name="description"]', "content", descs[lang] || descs.en);
+        setMeta('meta[property="og:title"]', "content", titles[lang] || titles.en);
+        setMeta('meta[property="og:description"]', "content", descs[lang] || descs.en);
+        setMeta('meta[property="og:locale"]', "content", locales[lang] || locales.en);
+        setMeta('meta[property="og:url"]', "content", base + canonicalPath);
+        setMeta('meta[name="twitter:title"]', "content", titles[lang] || titles.en);
+        setMeta('meta[name="twitter:description"]', "content", descs[lang] || descs.en);
+        setMeta('link[rel="canonical"]', "href", base + canonicalPath);
+      })();
+    </script>
 
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" type="image/png" href="/favicon.png" />

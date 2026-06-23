@@ -284,6 +284,9 @@ const translations = { en, tr };
 
 export function useTranslation() {
   const [lang, setLang] = useState<Language>(() => {
+    const path = window.location.pathname;
+    if (path === "/tr" || path.startsWith("/tr/")) return "tr";
+    if (path === "/en" || path.startsWith("/en/")) return "en";
     return (localStorage.getItem("categoriends_lang") as Language) || "en";
   });
 

@@ -20,7 +20,11 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/en" component={Home} />
+      <Route path="/tr" component={Home} />
       <Route path="/daily" component={DailyCategory} />
+      <Route path="/en/daily" component={DailyCategory} />
+      <Route path="/tr/daily" component={DailyCategory} />
       <Route path="/solo" component={SoloSetup} />
       <Route path="/room/create" component={CreateRoom} />
       <Route path="/room/join" component={JoinRoom} />

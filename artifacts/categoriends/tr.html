@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Categoriends - Online Kategori Oyunu &amp; Kelime Yarışması</title>
+
+    <meta name="description" content="Categoriends'i arkadaşlarınla oyna! Süre dolmadan kategorideki şeyleri say. Solo, 1v1 düello veya parti modu." />
+    <meta name="keywords" content="kategori oyunu, kelime oyunu, çok oyunculu, online oyun, arkadaşlarla oyun" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://categoriends.replit.app/tr" />
+
+    <link rel="alternate" hreflang="x-default" href="https://categoriends.replit.app/" />
+    <link rel="alternate" hreflang="en" href="https://categoriends.replit.app/en" />
+    <link rel="alternate" hreflang="tr" href="https://categoriends.replit.app/tr" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Categoriends - Online Kategori Oyunu &amp; Kelime Yarışması" />
+    <meta property="og:description" content="Categoriends'i arkadaşlarınla oyna! Süre dolmadan kategorideki şeyleri say. Solo, 1v1 düello veya parti modu." />
+    <meta property="og:image" content="https://categoriends.replit.app/opengraph.jpg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://categoriends.replit.app/tr" />
+    <meta property="og:locale" content="tr_TR" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Categoriends - Online Kategori Oyunu &amp; Kelime Yarışması" />
+    <meta name="twitter:description" content="Categoriends'i arkadaşlarınla oyna! Süre dolmadan kategorideki şeyleri say. Solo, 1v1 düello veya parti modu." />
+
+    <!-- Update canonical and og:url for subpages (e.g. /tr/daily) -->
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        var base = "https://categoriends.replit.app";
+        if (path !== "/tr" && path !== "/tr/") {
+          var setMeta = function (sel, attr, val) {
+            var el = document.querySelector(sel);
+            if (el) el.setAttribute(attr, val);
+          };
+          setMeta('link[rel="canonical"]', "href", base + path);
+          setMeta('meta[property="og:url"]', "content", base + path);
+        }
+      })();
+    </script>
+
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" type="image/png" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
