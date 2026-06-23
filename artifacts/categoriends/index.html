@@ -68,6 +68,50 @@
       })();
     </script>
 
+    <!-- Structured data — JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://categoriends.replit.app/#website",
+          "name": "Categoriends",
+          "alternateName": "Categoriends - Muhteşem Kelime Savaşları",
+          "url": "https://categoriends.replit.app/",
+          "description": "Play Categoriends with friends! Name things in a category before time runs out. Solo, 1v1 duel, or party mode.",
+          "inLanguage": ["en", "tr"],
+          "image": "https://categoriends.replit.app/opengraph.jpg"
+        },
+        {
+          "@type": "VideoGame",
+          "@id": "https://categoriends.replit.app/#game",
+          "name": "Categoriends",
+          "url": "https://categoriends.replit.app/",
+          "description": "Real-time multiplayer category word game. Players take turns naming things in a category before the timer runs out. Play solo, 1v1 duel, or party mode with friends.",
+          "genre": ["Word Game", "Party Game", "Trivia"],
+          "gamePlatform": "Web browser",
+          "numberOfPlayers": {
+            "@type": "QuantitativeValue",
+            "minValue": 1,
+            "maxValue": 20
+          },
+          "playMode": ["MultiPlayer", "SinglePlayer"],
+          "applicationCategory": "Game",
+          "operatingSystem": "Any",
+          "inLanguage": ["en", "tr"],
+          "isAccessibleForFree": true,
+          "image": "https://categoriends.replit.app/opengraph.jpg",
+          "publisher": {
+            "@type": "Organization",
+            "name": "Categoriends",
+            "url": "https://categoriends.replit.app/"
+          }
+        }
+      ]
+    }
+    </script>
+
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" type="image/png" href="/favicon.png" />
     <link rel="manifest" href="/manifest.json" />
