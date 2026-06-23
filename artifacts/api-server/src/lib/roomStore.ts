@@ -21,6 +21,7 @@ export interface Room {
   currentPlayerId: string | null;
   turnOrder: string[];
   timeSeconds: number;
+  impossibleMode: boolean;
   createdAt: number;
   /** IDs of eliminated players in order, earliest eliminated first. */
   eliminationOrder: string[];
@@ -42,7 +43,8 @@ export function createRoom(
   mode: Room["mode"],
   language: Room["language"],
   category: string,
-  timeSeconds: number = 15
+  timeSeconds: number = 15,
+  impossibleMode: boolean = false
 ): Room {
   let code = generateCode();
   while (rooms.has(code)) {
@@ -62,6 +64,7 @@ export function createRoom(
     currentPlayerId: null,
     turnOrder: [],
     timeSeconds,
+    impossibleMode,
     createdAt: Date.now(),
     eliminationOrder: [],
   };

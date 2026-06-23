@@ -29,7 +29,7 @@ interface ExtWebSocket extends WebSocket {
 }
 
 type WSMessage =
-  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number }
+  | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number; impossibleMode?: boolean }
   | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string }
   | { type: "rejoin"; roomCode: string; playerId: string }
   | { type: "ping" }
@@ -39,7 +39,7 @@ type WSMessage =
   | { type: "next_turn"; roomCode: string }
   | { type: "game_over_request"; roomCode: string; winnerId: string; winnerName: string }
   | { type: "reset_room"; roomCode: string }
-  | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number }
+  | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number; impossibleMode?: boolean }
   | { type: "kick_player"; roomCode: string; hostId: string; targetId: string }
   | { type: "leave_game"; roomCode: string; playerId: string }
   | { type: "leave_room"; roomCode: string; playerId: string };
@@ -255,7 +255,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
               } catch { /* use default */ }
             }
 
-            const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category, msg.timeSeconds ?? 15);
+            const room = createRoom(msg.hostId, msg.mode, msg.language, msg.category, msg.timeSeconds ?? 15, msg.impossibleMode ?? false);
             const player: Player = {
               id: msg.hostId,
               name: msg.playerName,
@@ -402,11 +402,15 @@ export function setupWebSocket(server: Server): WebSocketServer {
             if (player) player.score += 1;
 
             const nextPlayerId = getNextPlayer(room);
-            updateRoom(msg.roomCode, {
+            const roomUpdates: Partial<Room> = {
               acceptedAnswers: answers,
               currentPlayerId: nextPlayerId,
               players: room.players,
-            });
+            };
+            if (room.impossibleMode) {
+              roomUpdates.timeSeconds = Math.max(7, room.timeSeconds - 1);
+            }
+            updateRoom(msg.roomCode, roomUpdates);
 
             const tsTurnPassed = Date.now();
             currentTurnStartedAt.set(msg.roomCode, tsTurnPassed);
@@ -512,12 +516,14 @@ export function setupWebSocket(server: Server): WebSocketServer {
             ? oldRoom.hostId
             : (oldRoom.players.find((p) => connectedIds.has(p.id))?.id ?? oldRoom.hostId);
 
+          const resetTimeSeconds = oldRoom.impossibleMode ? 18 : oldRoom.timeSeconds;
           const newRoom = createRoom(
             newHostId,
             oldRoom.mode,
             oldRoom.language,
             oldRoom.category,
-            oldRoom.timeSeconds,
+            resetTimeSeconds,
+            oldRoom.impossibleMode,
           );
           for (const p of oldRoom.players) {
             if (connectedIds.has(p.id)) {
@@ -663,7 +669,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "update_room_settings": {
           const room = getRoom(msg.roomCode);
           if (!room || room.hostId !== msg.playerId || room.status !== "waiting") return;
-          updateRoom(msg.roomCode, { category: msg.category, timeSeconds: msg.timeSeconds });
+          updateRoom(msg.roomCode, { category: msg.category, timeSeconds: msg.timeSeconds, impossibleMode: msg.impossibleMode ?? false });
           broadcastAll(msg.roomCode, {
             type: "lobby_sync",
             room: getRoom(msg.roomCode),

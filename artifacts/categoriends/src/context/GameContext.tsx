@@ -21,6 +21,7 @@ export interface Room {
   customSubcategory?: boolean;
   language: Language;
   timeSeconds: number;
+  impossibleMode?: boolean;
   turnOrder: string[];
 }
 

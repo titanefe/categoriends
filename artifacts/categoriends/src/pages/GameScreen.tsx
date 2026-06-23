@@ -314,11 +314,18 @@ export default function GameScreen() {
             if (isSolo) {
               if (timerRef.current) clearInterval(timerRef.current);
               timerPausedRef.current = false;
+              const currentRoomTime = room?.timeSeconds ?? 15;
+              const newTimeSeconds = room?.impossibleMode
+                ? Math.max(7, currentRoomTime - 1)
+                : currentRoomTime;
+              if (room?.impossibleMode) {
+                setRoom({ ...room!, timeSeconds: newTimeSeconds });
+              }
               setGameState({
                 subcategory: gameState!.subcategory,
                 currentPlayerId: player!.id,
                 acceptedAnswers: [...previousAnswers, trimmed],
-                timeLeft: timerMax,
+                timeLeft: newTimeSeconds,
                 round: (gameState?.round ?? 1) + 1,
                 turnStartedAt: Date.now(),
               });

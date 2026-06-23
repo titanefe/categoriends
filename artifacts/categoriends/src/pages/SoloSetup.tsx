@@ -6,6 +6,7 @@ import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 import { useGenerateSubcategory } from "@workspace/api-client-react";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
+const IMPOSSIBLE_SENTINEL = -1;
 
 export default function SoloSetup() {
   const { t, lang } = useTranslation();
@@ -15,6 +16,7 @@ export default function SoloSetup() {
   const [custom, setCustom] = useState("");
   const [timeSeconds, setTimeSeconds] = useState(15);
   const [error, setError] = useState("");
+  const isImpossible = timeSeconds === IMPOSSIBLE_SENTINEL;
 
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
   const generateMutation = useGenerateSubcategory();
@@ -29,6 +31,7 @@ export default function SoloSetup() {
 
     const playerId = `solo-${Date.now()}`;
     const playerName = t("game.soloPlayerName");
+    const actualTimeSeconds = isImpossible ? 18 : timeSeconds;
 
     setPlayer({ id: playerId, name: playerName, score: 0, eliminated: false });
 
@@ -37,9 +40,10 @@ export default function SoloSetup() {
       setRoom({
         code: "SOLO", mode: "solo", hostId: playerId,
         players: [{ id: playerId, name: playerName, score: 0, eliminated: false }],
-        status: "playing", subcategory, category, language: lang, timeSeconds, turnOrder: [],
+        status: "playing", subcategory, category, language: lang,
+        timeSeconds: actualTimeSeconds, impossibleMode: isImpossible, turnOrder: [],
       });
-      setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: timeSeconds, round: 1, turnStartedAt: Date.now() });
+      setGameState({ subcategory, currentPlayerId: playerId, acceptedAnswers: [], timeLeft: actualTimeSeconds, round: 1, turnStartedAt: Date.now() });
       setLocation("/game");
       return;
     }
@@ -57,14 +61,15 @@ export default function SoloSetup() {
             subcategory: result.subcategory,
             category,
             language: lang,
-            timeSeconds,
+            timeSeconds: actualTimeSeconds,
+            impossibleMode: isImpossible,
             turnOrder: [],
           });
           setGameState({
             subcategory: result.subcategory,
             currentPlayerId: playerId,
             acceptedAnswers: [],
-            timeLeft: timeSeconds,
+            timeLeft: actualTimeSeconds,
             round: 1,
             turnStartedAt: Date.now(),
           });
@@ -138,6 +143,16 @@ export default function SoloSetup() {
                 {sec}s
               </button>
             ))}
+            <button
+              onClick={() => setTimeSeconds(IMPOSSIBLE_SENTINEL)}
+              className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
+                isImpossible
+                  ? "border-destructive bg-destructive/15 text-destructive"
+                  : "border-border text-muted-foreground hover:border-destructive/50"
+              }`}
+            >
+              {t("setup.impossible")}
+            </button>
           </div>
         </div>
 

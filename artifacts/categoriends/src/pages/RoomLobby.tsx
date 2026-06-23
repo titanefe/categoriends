@@ -6,6 +6,7 @@ import { useGenerateSubcategory } from "@workspace/api-client-react";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
+const IMPOSSIBLE_SENTINEL = -1;
 
 export default function RoomLobby() {
   const { t } = useTranslation();
@@ -19,6 +20,7 @@ export default function RoomLobby() {
   const [settingsCategory, setSettingsCategory] = useState<string>("");
   const [settingsCustom, setSettingsCustom] = useState("");
   const [settingsTime, setSettingsTime] = useState(15);
+  const isSettingsImpossible = settingsTime === IMPOSSIBLE_SENTINEL;
 
   // Always-current refs so popstate / beforeunload callbacks are never stale
   const wsRef = useRef(ws);
@@ -44,7 +46,7 @@ export default function RoomLobby() {
   useEffect(() => {
     if (room) {
       setSettingsCategory(room.category);
-      setSettingsTime(room.timeSeconds ?? 15);
+      setSettingsTime(room.impossibleMode ? IMPOSSIBLE_SENTINEL : (room.timeSeconds ?? 15));
       setSettingsCustom("");
     }
   }, [room?.code]);
@@ -145,7 +147,8 @@ export default function RoomLobby() {
       roomCode: room.code,
       playerId: player.id,
       category,
-      timeSeconds: settingsTime,
+      timeSeconds: isSettingsImpossible ? 18 : settingsTime,
+      impossibleMode: isSettingsImpossible,
     }));
     setShowSettings(false);
   }
@@ -224,7 +227,7 @@ export default function RoomLobby() {
         <p className="text-muted-foreground text-sm mb-6">
           {room.mode === "duel" ? t("setup.mode.duel") : t("setup.mode.party")}
           {" — "}{room.category}
-          {room.timeSeconds ? ` — ${room.timeSeconds}s` : ""}
+          {room.impossibleMode ? ` — ${t("setup.impossible")}` : room.timeSeconds ? ` — ${room.timeSeconds}s` : ""}
         </p>
 
         {/* Settings panel (host only, collapsible) */}
@@ -273,6 +276,16 @@ export default function RoomLobby() {
                   {sec}s
                 </button>
               ))}
+              <button
+                onClick={() => setSettingsTime(IMPOSSIBLE_SENTINEL)}
+                className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
+                  isSettingsImpossible
+                    ? "border-destructive bg-destructive/15 text-destructive"
+                    : "border-border text-muted-foreground hover:border-destructive/50"
+                }`}
+              >
+                {t("setup.impossible")}
+              </button>
             </div>
 
             <button

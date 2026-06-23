@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
+const IMPOSSIBLE_SENTINEL = -1;
 
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
@@ -18,6 +19,7 @@ export default function CreateRoom() {
   const [name, setName] = useState("");
   const [timeSeconds, setTimeSeconds] = useState(15);
   const [error, setError] = useState("");
+  const isImpossible = timeSeconds === IMPOSSIBLE_SENTINEL;
 
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
 
@@ -60,7 +62,8 @@ export default function CreateRoom() {
           mode,
           language: lang,
           category,
-          timeSeconds,
+          timeSeconds: isImpossible ? 18 : timeSeconds,
+          impossibleMode: isImpossible,
         }));
       } else if (socket.readyState === WebSocket.CONNECTING) {
         setTimeout(tryCreate, 100);
@@ -136,6 +139,16 @@ export default function CreateRoom() {
                 {sec}s
               </button>
             ))}
+            <button
+              onClick={() => setTimeSeconds(IMPOSSIBLE_SENTINEL)}
+              className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
+                isImpossible
+                  ? "border-destructive bg-destructive/15 text-destructive"
+                  : "border-border text-muted-foreground hover:border-destructive/50"
+              }`}
+            >
+              {t("setup.impossible")}
+            </button>
           </div>
         </div>
 
