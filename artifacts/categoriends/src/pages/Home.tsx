@@ -110,6 +110,14 @@ export default function Home() {
         {/* Action buttons */}
         <div className="w-full flex flex-col gap-3">
           <button
+            data-testid="button-daily"
+            onClick={() => setLocation("/daily")}
+            className="w-full py-4 rounded-xl font-semibold text-lg border border-accent/50 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent active:scale-[0.98] transition-all"
+          >
+            📅 {t("home.daily")}
+          </button>
+
+          <button
             data-testid="button-solo"
             onClick={handleSolo}
             className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all shadow-lg animate-glow-primary"

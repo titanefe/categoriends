@@ -1,0 +1,1 @@
+- [Daily Category feature](daily-category.md) — server-side rotating daily challenge with leaderboard; 3 attempts/day, best score shown.

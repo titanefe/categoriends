@@ -5,9 +5,16 @@ import { useGame } from "@/context/GameContext";
 import { useAuth } from "@/context/AuthContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
+interface DailySubmitResult {
+  saved: boolean;
+  attemptsLeft: number;
+  bestScore: number;
+  rank?: number;
+}
+
 export default function Result() {
   const { t } = useTranslation();
-  const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, soloToken, setSoloToken, disconnectWs, ws } = useGame();
+  const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, soloToken, setSoloToken, isDailyMode, setIsDailyMode, disconnectWs, ws } = useGame();
   const { user, refetch: refetchAuth } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -21,13 +28,34 @@ export default function Result() {
   const winner = isSolo ? player : sorted[0];
 
   const allPresets = [...MAIN_CATEGORIES_EN, ...MAIN_CATEGORIES_TR];
-  const isCustom = room?.customSubcategory ?? (room ? !allPresets.includes(room.category) : false);
+  const isCustom = !isDailyMode && (room?.customSubcategory ?? (room ? !allPresets.includes(room.category) : false));
 
   const [soloEloResult, setSoloEloResult] = useState<{ delta: number; eloAfter: number } | null>(null);
+  const [dailyResult, setDailyResult] = useState<DailySubmitResult | null>(null);
   const soloEloCalledRef = useRef(false);
+  const dailySubmitCalledRef = useRef(false);
 
+  // Daily mode: submit score to /api/daily/submit
   useEffect(() => {
-    if (!isSolo || !user || soloEloCalledRef.current) return;
+    if (!isDailyMode || !isSolo || dailySubmitCalledRef.current) return;
+    dailySubmitCalledRef.current = true;
+    if (!user) return; // guests don't save
+    fetch("/api/daily/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ score }),
+    })
+      .then((r) => r.json())
+      .then((data: DailySubmitResult) => {
+        setDailyResult(data);
+      })
+      .catch(() => {});
+  }, [isDailyMode, isSolo, user, score]);
+
+  // Regular solo Elo recording (skipped for daily mode)
+  useEffect(() => {
+    if (isDailyMode || !isSolo || !user || soloEloCalledRef.current) return;
     if (!soloToken) return;
     soloEloCalledRef.current = true;
     const tokenToUse = soloToken;
@@ -68,12 +96,17 @@ export default function Result() {
     return () => ws.removeEventListener("message", handleMsg);
   }, [ws, isSolo, setRoom, setGameState, setEloDeltas, setLocation]);
 
-  function handlePlayAgain() {
+  function handleExit() {
     disconnectWs();
     setRoom(null);
     setGameState(null);
     setEloDeltas(null);
-    setLocation("/");
+    setIsDailyMode(false);
+    if (isDailyMode) {
+      setLocation("/daily");
+    } else {
+      setLocation("/");
+    }
   }
 
   function handleReturnToLobby() {
@@ -133,7 +166,45 @@ export default function Result() {
                       <span className="text-foreground/80">{subcategory}</span>
                     </p>
                   )}
-                  {user && !isCustom && soloEloResult && (
+
+                  {/* Daily mode result */}
+                  {isDailyMode && (
+                    <div className="mt-5 bg-card border border-accent/30 rounded-xl p-4 text-left flex flex-col gap-2">
+                      {user ? (
+                        dailyResult ? (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-mono text-muted-foreground">{t("daily.submitted")}</span>
+                              {dailyResult.rank && (
+                                <span className="text-xs font-mono font-bold text-accent">
+                                  {t("daily.rank").replace("{n}", String(dailyResult.rank))}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">
+                                {t("daily.yourBest").replace("{n}", String(dailyResult.bestScore))}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {dailyResult.attemptsLeft > 0
+                                  ? t("daily.attemptsLeft").replace("{n}", String(dailyResult.attemptsLeft))
+                                  : t("daily.noAttemptsLeft")}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground font-mono text-center">Kaydediliyor...</span>
+                        )
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center">
+                          {t("daily.guestScore").replace("{n}", String(score))}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Regular solo Elo (only for non-daily) */}
+                  {!isDailyMode && user && !isCustom && soloEloResult && (
                     <div className="mt-4 flex items-center justify-center gap-2">
                       <span className="text-xs text-muted-foreground font-mono">{t("auth.elo")}</span>
                       <EloDeltaBadge delta={soloEloResult.delta} />
@@ -142,12 +213,12 @@ export default function Result() {
                       </span>
                     </div>
                   )}
-                  {isCustom && (
+                  {!isDailyMode && isCustom && (
                     <p className="text-xs text-muted-foreground/50 font-mono mt-3">
                       Custom categories don&apos;t affect your Elo rating. / Özel kategoriler Elo puanınızı etkilemez.
                     </p>
                   )}
-                  {!user && (
+                  {!isDailyMode && !user && (
                     <p className="text-xs text-muted-foreground/50 font-mono mt-3">{t("auth.loginToTrackElo")}</p>
                   )}
                 </>
@@ -211,14 +282,14 @@ export default function Result() {
 
           <button
             data-testid="button-play-again"
-            onClick={handlePlayAgain}
+            onClick={handleExit}
             className={`w-full py-4 rounded-xl font-semibold text-lg transition-all active:scale-[0.98] ${
               isSolo
                 ? "bg-primary text-primary-foreground hover:opacity-90 animate-glow-primary"
                 : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
             }`}
           >
-            {t("result.playAgain")}
+            {isDailyMode ? t("nav.back") : t("result.playAgain")}
           </button>
         </div>
       </div>

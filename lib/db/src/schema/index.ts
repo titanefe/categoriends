@@ -20,3 +20,4 @@
 export * from "./rooms";
 export * from "./users";
 export * from "./elo_games";
+export * from "./daily_scores";

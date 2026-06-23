@@ -3,12 +3,14 @@ import healthRouter from "./health";
 import gameRouter from "./game";
 import authRouter from "./auth";
 import eloRouter from "./elo";
+import dailyRouter from "./daily";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(eloRouter);
+router.use(dailyRouter);
 router.use(gameRouter);
 
 export default router;

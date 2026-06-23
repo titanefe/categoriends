@@ -49,6 +49,8 @@ interface GameContextType {
   setEloDeltas: (d: Record<string, number> | null) => void;
   soloToken: string | null;
   setSoloToken: (t: string | null) => void;
+  isDailyMode: boolean;
+  setIsDailyMode: (v: boolean) => void;
   ws: WebSocket | null;
   connectWs: () => WebSocket;
   disconnectWs: () => void;
@@ -62,6 +64,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [eloDeltas, setEloDeltas] = useState<Record<string, number> | null>(null);
   const [soloToken, setSoloToken] = useState<string | null>(null);
+  const [isDailyMode, setIsDailyMode] = useState(false);
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -197,6 +200,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       gameState, setGameState,
       eloDeltas, setEloDeltas,
       soloToken, setSoloToken,
+      isDailyMode, setIsDailyMode,
       ws: wsInstance,
       connectWs, disconnectWs,
     }}>
