@@ -114,7 +114,7 @@ export default function Home() {
             onClick={() => setLocation("/daily")}
             className="w-full py-4 rounded-xl font-semibold text-lg border border-accent/50 bg-accent/10 text-accent hover:bg-accent/20 hover:border-accent active:scale-[0.98] transition-all"
           >
-            📅 {t("home.daily")}
+            {t("home.daily")}
           </button>
 
           <button
