@@ -160,6 +160,12 @@ export default function Result() {
                       {score}
                     </span>
                   </div>
+                  <div className="flex items-center justify-center gap-2 mt-1">
+                    <span className="text-muted-foreground text-xs font-mono">{t("result.time")}</span>
+                    <span className="text-sm font-bold font-mono text-foreground/80">
+                      {room?.impossibleMode ? t("setup.impossible") : `${timeSeconds}s`}
+                    </span>
+                  </div>
                   {subcategory && (
                     <p className="text-muted-foreground text-xs font-mono mt-3">
                       <span className="text-muted-foreground/60">{t("result.subcategory")}</span>{" "}

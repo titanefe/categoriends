@@ -153,7 +153,9 @@ export default function DailyCategory() {
         {/* Header */}
         <div className="text-center">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent/15 border border-accent/30 mb-3">
-            <span className="text-2xl">📅</span>
+            <svg className="w-7 h-7 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            </svg>
           </div>
           <h1 className="text-2xl font-bold text-foreground">{t("daily.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">{t("daily.subtitle")}</p>
@@ -181,7 +183,7 @@ export default function DailyCategory() {
 
             {/* Attempt info + play button */}
             <div className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-3">
-              {user ? (
+              {user && (
                 <>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
@@ -209,10 +211,6 @@ export default function DailyCategory() {
                     ))}
                   </div>
                 </>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center">
-                  {t("daily.loginToSave")}
-                </p>
               )}
 
               <button
