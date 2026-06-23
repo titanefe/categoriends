@@ -23,6 +23,38 @@ publicDir = "artifacts/categoriends/dist/public"
 serve = "static"
 
 [[services.production.rewrites]]
+from = "/daily"
+to = "/daily.html"
+
+[[services.production.rewrites]]
+from = "/solo"
+to = "/solo.html"
+
+[[services.production.rewrites]]
+from = "/room/create"
+to = "/room-create.html"
+
+[[services.production.rewrites]]
+from = "/room/join"
+to = "/room-join.html"
+
+[[services.production.rewrites]]
+from = "/tr"
+to = "/tr.html"
+
+[[services.production.rewrites]]
+from = "/tr/*"
+to = "/tr.html"
+
+[[services.production.rewrites]]
+from = "/en"
+to = "/en.html"
+
+[[services.production.rewrites]]
+from = "/en/*"
+to = "/en.html"
+
+[[services.production.rewrites]]
 from = "/*"
 to = "/index.html"
 

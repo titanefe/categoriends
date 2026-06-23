@@ -27,7 +27,7 @@ if (!basePath) {
   );
 }
 
-function localeHtmlRewrite() {
+function htmlRewrite() {
   const middleware: Connect.NextHandleFunction = (req, _res, next) => {
     const url = req.url ?? "";
     const urlPath = url.split("?")[0].split("#")[0];
@@ -36,11 +36,19 @@ function localeHtmlRewrite() {
       req.url = "/tr.html" + qs;
     } else if (urlPath === "/en" || urlPath.startsWith("/en/")) {
       req.url = "/en.html" + qs;
+    } else if (urlPath === "/daily") {
+      req.url = "/daily.html" + qs;
+    } else if (urlPath === "/solo") {
+      req.url = "/solo.html" + qs;
+    } else if (urlPath === "/room/create") {
+      req.url = "/room-create.html" + qs;
+    } else if (urlPath === "/room/join") {
+      req.url = "/room-join.html" + qs;
     }
     next();
   };
   return {
-    name: "locale-html-rewrite",
+    name: "html-rewrite",
     configureServer(server: { middlewares: { use: (fn: Connect.NextHandleFunction) => void } }) {
       server.middlewares.use(middleware);
     },
@@ -53,7 +61,7 @@ function localeHtmlRewrite() {
 export default defineConfig({
   base: basePath,
   plugins: [
-    localeHtmlRewrite(),
+    htmlRewrite(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
@@ -87,6 +95,10 @@ export default defineConfig({
         main: path.resolve(import.meta.dirname, "index.html"),
         en: path.resolve(import.meta.dirname, "en.html"),
         tr: path.resolve(import.meta.dirname, "tr.html"),
+        daily: path.resolve(import.meta.dirname, "daily.html"),
+        solo: path.resolve(import.meta.dirname, "solo.html"),
+        "room-create": path.resolve(import.meta.dirname, "room-create.html"),
+        "room-join": path.resolve(import.meta.dirname, "room-join.html"),
       },
     },
   },
