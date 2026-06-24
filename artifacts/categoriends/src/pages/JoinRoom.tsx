@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function JoinRoom() {
   const { t, lang } = useTranslation();
   const { user } = useAuth();
-  const { setRoom, setPlayer, connectWs, ws } = useGame();
+  const { setRoom, setPlayer, setRejoinSecret, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -21,6 +21,7 @@ export default function JoinRoom() {
         const data = JSON.parse(evt.data);
         if (data.type === "room_state" && data.room) {
           setRoom(data.room as Room);
+          if (typeof data.rejoinSecret === "string") setRejoinSecret(data.rejoinSecret);
           setLocation(`/room/${data.room.code}`);
         }
         if (data.type === "error") {

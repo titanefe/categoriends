@@ -336,22 +336,19 @@ export default function GameScreen() {
                 roomCode: room.code,
                 playerId: player!.id,
                 answer: trimmed,
-                valid: true,
-                reason: result.reason,
               }));
             }
           } else {
             triggerRejected(result.reason);
             setAnswer("");
-            // Broadcast invalid answer so other players can see it as a toast
+            // Notify server so other players can see this attempt as a toast.
+            // The server re-verifies independently and broadcasts the authoritative result.
             if (!isSolo && ws && room) {
               ws.send(JSON.stringify({
                 type: "answer_submitted",
                 roomCode: room.code,
                 playerId: player!.id,
                 answer: trimmed,
-                valid: false,
-                reason: result.reason,
               }));
             }
           }
