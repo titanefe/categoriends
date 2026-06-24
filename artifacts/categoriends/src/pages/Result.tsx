@@ -232,7 +232,7 @@ export default function Result() {
                   )}
                   {!isDailyMode && isCustom && (
                     <p className="text-xs text-muted-foreground/50 font-mono mt-3">
-                      Custom categories don&apos;t affect your Elo rating. / Özel kategoriler Elo puanınızı etkilemez.
+                      {t("elo.noRating")}
                     </p>
                   )}
                   {!isDailyMode && !user && (
@@ -278,7 +278,7 @@ export default function Result() {
               </div>
               {isCustom && (
                 <p className="text-xs text-muted-foreground/50 font-mono mt-3 text-center">
-                  Custom categories don&apos;t affect your Elo rating. / Özel kategoriler Elo puanınızı etkilemez.
+                  {t("elo.noRating")}
                 </p>
               )}
               {!user && !isCustom && (
