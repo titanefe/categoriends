@@ -22,6 +22,7 @@ export interface Room {
   language: Language;
   timeSeconds: number;
   impossibleMode?: boolean;
+  quickMatch?: boolean;
   turnOrder: string[];
 }
 

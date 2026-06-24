@@ -13,6 +13,7 @@ import RoomLobby from "@/pages/RoomLobby";
 import GameScreen from "@/pages/GameScreen";
 import Result from "@/pages/Result";
 import DailyCategory from "@/pages/DailyCategory";
+import QuickMatch from "@/pages/QuickMatch";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/daily" component={DailyCategory} />
       <Route path="/en/daily" component={DailyCategory} />
       <Route path="/tr/daily" component={DailyCategory} />
+      <Route path="/quickmatch" component={QuickMatch} />
       <Route path="/solo" component={SoloSetup} />
       <Route path="/room/create" component={CreateRoom} />
       <Route path="/room/join" component={JoinRoom} />

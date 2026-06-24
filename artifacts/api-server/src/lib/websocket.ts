@@ -17,6 +17,19 @@ import {
   type Player,
   type Room,
 } from "./roomStore";
+import {
+  joinQueue,
+  leaveQueue,
+  leaveAllQueues,
+  getQueue,
+  isQueueFull,
+  popMatch,
+  getRequired,
+  type QueueMode,
+  type QueueLang,
+} from "./matchmakingQueue";
+import { SUBCATEGORY_POOLS, CATEGORY_TO_KEY } from "./subcategoryPools";
+import { openai } from "./openai";
 import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
 import { sessionMiddleware } from "../app";
@@ -42,7 +55,9 @@ type WSMessage =
   | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number; impossibleMode?: boolean }
   | { type: "kick_player"; roomCode: string; hostId: string; targetId: string }
   | { type: "leave_game"; roomCode: string; playerId: string }
-  | { type: "leave_room"; roomCode: string; playerId: string };
+  | { type: "leave_room"; roomCode: string; playerId: string }
+  | { type: "join_queue"; mode: QueueMode; language: QueueLang; playerId: string; playerName: string }
+  | { type: "leave_queue"; mode: QueueMode; language: QueueLang; playerId: string };
 
 const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
@@ -677,6 +692,151 @@ export function setupWebSocket(server: Server): WebSocketServer {
           break;
         }
 
+        case "join_queue": {
+          void (async () => {
+            const { mode, language, playerId, playerName } = msg;
+
+            // Resolve authenticated user
+            const userId = ws.sessionUserId ?? null;
+            let elo = 1000;
+            if (userId) {
+              try {
+                const rows = await db.select({ elo: usersTable.elo }).from(usersTable).where(eq(usersTable.id, userId));
+                elo = rows[0]?.elo ?? 1000;
+              } catch { /* use default */ }
+            }
+
+            // Tag this socket so we can clean up on disconnect
+            ws.playerId = playerId;
+
+            joinQueue(mode, language, { playerId, playerName, language, ws });
+            const q = getQueue(mode, language);
+            const req = getRequired(mode);
+
+            // Notify all waiting players of current count
+            for (const entry of q) {
+              sendToSocket(entry.ws, { type: "queue_update", count: q.length, required: req });
+            }
+
+            // Check if we have enough players to start
+            if (isQueueFull(mode, language)) {
+              const matched = popMatch(mode, language);
+              if (!matched) return;
+
+              // Generate a random subcategory
+              const QUICK_CATEGORIES_EN = ["Animals", "Film & TV", "Music", "Food & Drink", "Sports", "Games", "Geography", "Science"];
+              const QUICK_CATEGORIES_TR = ["Hayvanlar", "Film & Dizi", "Müzik", "Yiyecek & İçecek", "Spor", "Oyunlar", "Coğrafya", "Bilim"];
+              const cats = language === "tr" ? QUICK_CATEGORIES_TR : QUICK_CATEGORIES_EN;
+              const catEnKeys = ["Animals", "Film & TV", "Music", "Food & Drink", "Sports", "Games", "Geography", "Science"];
+              const randomIdx = Math.floor(Math.random() * cats.length);
+              const category = cats[randomIdx];
+              const categoryKey = catEnKeys[randomIdx];
+              const poolKey = CATEGORY_TO_KEY[categoryKey] ?? categoryKey;
+              const pool = SUBCATEGORY_POOLS[poolKey];
+              const poolOptions: string[] = pool ? (language === "tr" ? pool.tr : pool.en) : [];
+
+              let subcategory = poolOptions.length > 0
+                ? poolOptions[Math.floor(Math.random() * poolOptions.length)]
+                : category;
+
+              // Try AI generation (non-blocking — fallback to pool on error)
+              try {
+                if (poolOptions.length > 0 && Math.random() >= 0.5) {
+                  const poolList = poolOptions.join(", ");
+                  const systemPrompt = language === "tr"
+                    ? `Sen bir kelime oyunu asistanısın. "${category}" kategorisi için GENİŞ ve BASİT bir alt kategori üret. Kısa (2-4 kelime), oynanabilir olmalı. Sadece alt kategoriyi yaz. Mevcut liste (tekrar ETME): ${poolList}`
+                    : `You are a word game assistant. Generate a BROAD, SIMPLE sub-category for "${category}". Keep it short (2-4 words), playable. Output ONLY the sub-category name. Existing list (do NOT repeat): ${poolList}`;
+                  const userPrompt = language === "tr"
+                    ? `"${category}" için listede olmayan yeni bir alt kategori üret.`
+                    : `Generate a fresh sub-category for "${category}" not in the existing list.`;
+                  const completion = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    max_tokens: 30,
+                    temperature: 1.2,
+                    messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+                  });
+                  subcategory = completion.choices[0]?.message?.content?.trim() ?? subcategory;
+                }
+              } catch { /* use pool pick */ }
+
+              // Create room for matched players
+              const hostId = matched[0].playerId;
+              const roomMode: Room["mode"] = mode === "duel" ? "duel" : "party";
+              const room = createRoom(hostId, roomMode, language, category, 15, false, true);
+
+              // Register socket set for room
+              roomSockets.set(room.code, new Set());
+
+              // Add all players
+              for (const entry of matched) {
+                const eloEntry = entry.playerId === playerId ? elo : 1000;
+                const entryPlayer: Player = {
+                  id: entry.playerId,
+                  name: entry.playerName,
+                  score: 0,
+                  eliminated: false,
+                  userId: null,
+                  elo: eloEntry,
+                };
+                addPlayerToRoom(room.code, entryPlayer);
+                const extWs = entry.ws as ExtWebSocket;
+                extWs.roomCode = room.code;
+                extWs.playerId = entry.playerId;
+                roomSockets.get(room.code)!.add(extWs);
+              }
+
+              // Notify remaining queue about updated count
+              const remaining = getQueue(mode, language);
+              for (const entry of remaining) {
+                sendToSocket(entry.ws, { type: "queue_update", count: remaining.length, required: req });
+              }
+
+              // Auto-start game: shuffle turn order
+              const turnOrder = matched.map((e) => e.playerId);
+              for (let i = turnOrder.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [turnOrder[i], turnOrder[j]] = [turnOrder[j], turnOrder[i]];
+              }
+              const firstPlayerId = turnOrder[0];
+
+              updateRoom(room.code, {
+                status: "playing",
+                subcategory,
+                customSubcategory: false,
+                acceptedAnswers: [],
+                turnOrder,
+                currentPlayerId: firstPlayerId,
+                eliminationOrder: [],
+              });
+
+              const tsStart = Date.now();
+              currentTurnStartedAt.set(room.code, tsStart);
+
+              broadcastAll(room.code, {
+                type: "match_found",
+                room: getRoom(room.code),
+                subcategory,
+                firstPlayerId,
+                turnStartedAt: tsStart,
+              });
+
+              if (firstPlayerId) scheduleTurnTimeout(room.code, firstPlayerId);
+            }
+          })();
+          break;
+        }
+
+        case "leave_queue": {
+          const { mode, language, playerId } = msg;
+          leaveQueue(mode, language, playerId);
+          const q = getQueue(mode, language);
+          const req = getRequired(mode);
+          for (const entry of q) {
+            sendToSocket(entry.ws, { type: "queue_update", count: q.length, required: req });
+          }
+          break;
+        }
+
         case "ping": break;
 
         default: break;
@@ -684,6 +844,12 @@ export function setupWebSocket(server: Server): WebSocketServer {
     });
 
     ws.on("close", () => {
+      // Remove from matchmaking queues if applicable
+      if (ws.playerId && !ws.roomCode) {
+        leaveAllQueues(ws.playerId);
+        // Notify remaining queue members (iterate all queues via leaveAllQueues already removed them)
+      }
+
       const roomCode = ws.roomCode;
       const playerId = ws.playerId;
       if (!roomCode || !playerId) return;

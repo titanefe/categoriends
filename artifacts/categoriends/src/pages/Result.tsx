@@ -19,6 +19,7 @@ export default function Result() {
   const [, setLocation] = useLocation();
 
   const isSolo = room?.mode === "solo";
+  const isQuickMatch = room?.quickMatch === true;
   const score = isSolo ? (gameState?.acceptedAnswers.length ?? 0) : 0;
   const subcategory = gameState?.subcategory ?? "";
   const timeSeconds = room?.timeSeconds ?? 15;
@@ -108,6 +109,16 @@ export default function Result() {
       setLocation("/");
     }
   }
+
+  // Quick match: auto-redirect home after 8s
+  useEffect(() => {
+    if (!isQuickMatch || isSolo) return;
+    const timer = setTimeout(() => {
+      handleExit();
+    }, 8000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isQuickMatch, isSolo]);
 
   function handleReturnToLobby() {
     if (!ws || !room) return;
@@ -276,7 +287,7 @@ export default function Result() {
             </div>
           )}
 
-          {!isSolo && (
+          {!isSolo && !isQuickMatch && (
             <button
               data-testid="button-return-lobby"
               onClick={handleReturnToLobby}
@@ -284,6 +295,11 @@ export default function Result() {
             >
               {t("result.returnToLobby")}
             </button>
+          )}
+          {isQuickMatch && (
+            <p className="text-xs text-muted-foreground/50 font-mono text-center mb-3">
+              {t("quickmatch.returningHome")}
+            </p>
           )}
 
           <button
