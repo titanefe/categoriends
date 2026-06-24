@@ -8,6 +8,8 @@ export interface QueueEntry {
   playerName: string;
   language: QueueLang;
   ws: WebSocket;
+  userId: string | null;
+  elo: number;
 }
 
 // Key: `${mode}:${language}` e.g. "duel:en", "party4:tr"

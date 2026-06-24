@@ -189,6 +189,7 @@ function checkAndEndGame(roomCode: string): boolean {
         ? [winner.id, ...[...room.eliminationOrder].reverse()]
         : [...room.eliminationOrder].reverse();
 
+      const guestIds = new Set(room.players.filter((p) => !p.userId).map((p) => p.id));
       let deltaMap: Map<string, number>;
       if (room.mode === "duel" && room.players.length === 2) {
         const winnerId = rankOrder[0];
@@ -197,8 +198,8 @@ function checkAndEndGame(roomCode: string): boolean {
         const loserPlayer = room.players.find((p) => p.id === loserId);
         if (winnerPlayer && loserPlayer) {
           deltaMap = new Map([
-            [winnerId, duelEloDelta(winnerPlayer.elo, loserPlayer.elo, true, room.timeSeconds)],
-            [loserId, duelEloDelta(loserPlayer.elo, winnerPlayer.elo, false, room.timeSeconds)],
+            [winnerId, duelEloDelta(winnerPlayer.elo, loserPlayer.elo, true, room.timeSeconds, guestIds.has(loserId))],
+            [loserId, duelEloDelta(loserPlayer.elo, winnerPlayer.elo, false, room.timeSeconds, guestIds.has(winnerId))],
           ]);
         } else {
           deltaMap = new Map();
@@ -210,6 +211,7 @@ function checkAndEndGame(roomCode: string): boolean {
             return { id, elo: p.elo, rank: idx + 1 };
           }),
           room.timeSeconds,
+          guestIds,
         );
       }
       for (const [id, delta] of deltaMap) {
@@ -709,7 +711,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             // Tag this socket so we can clean up on disconnect
             ws.playerId = playerId;
 
-            joinQueue(mode, language, { playerId, playerName, language, ws });
+            joinQueue(mode, language, { playerId, playerName, language, ws, userId, elo });
             const q = getQueue(mode, language);
             const req = getRequired(mode);
 
@@ -767,16 +769,15 @@ export function setupWebSocket(server: Server): WebSocketServer {
               // Register socket set for room
               roomSockets.set(room.code, new Set());
 
-              // Add all players
+              // Add all players — carry userId + elo from their queue entry
               for (const entry of matched) {
-                const eloEntry = entry.playerId === playerId ? elo : 1000;
                 const entryPlayer: Player = {
                   id: entry.playerId,
                   name: entry.playerName,
                   score: 0,
                   eliminated: false,
-                  userId: null,
-                  elo: eloEntry,
+                  userId: entry.userId,
+                  elo: entry.elo,
                 };
                 addPlayerToRoom(room.code, entryPlayer);
                 const extWs = entry.ws as ExtWebSocket;

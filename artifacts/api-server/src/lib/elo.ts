@@ -37,20 +37,29 @@ export function soloEloDelta(currentElo: number, answerCount: number, timeSecond
 }
 
 /**
+ * When a registered player competes against a guest (unregistered), reduce
+ * the Elo stake — wins count less, losses hurt less.
+ */
+const GUEST_OPPONENT_MULTIPLIER = 0.55;
+
+/**
  * 1v1 Elo change. Each player uses their own band-based K-factor.
  * won = true if this player won.
  * timeMultiplier adjusts for game difficulty (shorter games = higher reward).
+ * opponentIsGuest = true when the opponent has no registered account → reduced stake.
  */
 export function duelEloDelta(
   playerElo: number,
   opponentElo: number,
   won: boolean,
   timeSec: number,
+  opponentIsGuest = false,
 ): number {
   const K = kFactor(playerElo);
   const exp = expectedScore(playerElo, opponentElo);
   const delta = Math.round(K * ((won ? 1 : 0) - exp));
-  return Math.round(delta * timeMultiplier(timeSec));
+  const base = Math.round(delta * timeMultiplier(timeSec));
+  return opponentIsGuest ? Math.round(base * GUEST_OPPONENT_MULTIPLIER) : base;
 }
 
 /**
@@ -58,11 +67,13 @@ export function duelEloDelta(
  * rank 1 = winner (last standing), higher rank = eliminated earlier.
  * Each player uses their own band-based K-factor.
  * timeMultiplier adjusts for game difficulty (shorter games = higher reward).
+ * guestIds = set of playerIds that have no registered account → reduced stake for those pairings.
  * Returns a map of playerId → delta.
  */
 export function partyEloDeltas(
   players: { id: string; elo: number; rank: number }[],
   timeSec: number,
+  guestIds: Set<string> = new Set(),
 ): Map<string, number> {
   const m = timeMultiplier(timeSec);
   const deltas = new Map<string, number>(players.map((p) => [p.id, 0]));
@@ -75,8 +86,12 @@ export function partyEloDeltas(
       const bWon = b.rank < a.rank;
       const aExp = expectedScore(a.elo, b.elo);
       const bExp = expectedScore(b.elo, a.elo);
-      deltas.set(a.id, (deltas.get(a.id) ?? 0) + Math.round(m * kFactor(a.elo) * ((aWon ? 1 : 0) - aExp)));
-      deltas.set(b.id, (deltas.get(b.id) ?? 0) + Math.round(m * kFactor(b.elo) * ((bWon ? 1 : 0) - bExp)));
+      const aGuestOpponent = guestIds.has(b.id);
+      const bGuestOpponent = guestIds.has(a.id);
+      const aMult = aGuestOpponent ? GUEST_OPPONENT_MULTIPLIER : 1;
+      const bMult = bGuestOpponent ? GUEST_OPPONENT_MULTIPLIER : 1;
+      deltas.set(a.id, (deltas.get(a.id) ?? 0) + Math.round(m * aMult * kFactor(a.elo) * ((aWon ? 1 : 0) - aExp)));
+      deltas.set(b.id, (deltas.get(b.id) ?? 0) + Math.round(m * bMult * kFactor(b.elo) * ((bWon ? 1 : 0) - bExp)));
     }
   }
 
