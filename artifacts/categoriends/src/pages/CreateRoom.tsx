@@ -11,7 +11,7 @@ const IMPOSSIBLE_SENTINEL = -1;
 export default function CreateRoom() {
   const { t, lang } = useTranslation();
   const { user } = useAuth();
-  const { setRoom, setPlayer, setRejoinSecret, room, connectWs, ws } = useGame();
+  const { setRoom, setPlayer, room, connectWs, ws } = useGame();
   const [, setLocation] = useLocation();
   const [mode, setMode] = useState<GameMode>("duel");
   const [selected, setSelected] = useState<string | null>(null);
@@ -30,7 +30,6 @@ export default function CreateRoom() {
         const data = JSON.parse(evt.data);
         if (data.type === "room_created" && data.room) {
           setRoom(data.room as Room);
-          if (typeof data.rejoinSecret === "string") setRejoinSecret(data.rejoinSecret);
           setLocation(`/room/${data.room.code}`);
         }
         if (data.type === "player_joined" && data.room) {

@@ -52,9 +52,6 @@ interface GameContextType {
   setSoloToken: (t: string | null) => void;
   isDailyMode: boolean;
   setIsDailyMode: (v: boolean) => void;
-  /** Server-issued per-seat rejoin secret. Must be included in rejoin messages. */
-  rejoinSecret: string | null;
-  setRejoinSecret: (s: string | null) => void;
   ws: WebSocket | null;
   connectWs: () => WebSocket;
   disconnectWs: () => void;
@@ -70,20 +67,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const [soloToken, setSoloToken] = useState<string | null>(null);
   const [isDailyMode, setIsDailyMode] = useState(false);
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
-  const [rejoinSecret, setRejoinSecretState] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const roomRef = useRef<Room | null>(null);
   const playerRef = useRef<Player | null>(null);
-  const rejoinSecretRef = useRef<string | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preventReconnectRef = useRef(false);
-
-  const setRejoinSecret = (s: string | null) => {
-    rejoinSecretRef.current = s;
-    setRejoinSecretState(s);
-  };
 
   const setRoom = (r: Room | null) => {
     roomRef.current = r;
@@ -154,10 +144,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       openConnection((ws) => {
         const r2 = roomRef.current;
         const p2 = playerRef.current;
-        const secret = rejoinSecretRef.current;
-        if (r2 && p2 && secret) {
+        if (r2 && p2) {
           try {
-            ws.send(JSON.stringify({ type: "rejoin", roomCode: r2.code, playerId: p2.id, rejoinSecret: secret }));
+            ws.send(JSON.stringify({ type: "rejoin", roomCode: r2.code, playerId: p2.id }));
           } catch {}
         }
       });
@@ -205,27 +194,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setTimeout(() => { preventReconnectRef.current = false; }, 300);
   };
 
-  // Listen for server-issued rejoin secrets and rotations on the active socket.
-  // This fires when: room_created, room_state (handled in pages), game_state_sync
-  // (post-rejoin rotation), and rejoin_secret (post-reset refresh).
-  useEffect(() => {
-    const ws = wsInstance;
-    if (!ws) return;
-    const handler = (evt: MessageEvent) => {
-      try {
-        const data = JSON.parse(evt.data as string) as Record<string, unknown>;
-        if (
-          (data.type === "game_state_sync" || data.type === "rejoin_secret") &&
-          typeof data.rejoinSecret === "string"
-        ) {
-          setRejoinSecret(data.rejoinSecret);
-        }
-      } catch {}
-    };
-    ws.addEventListener("message", handler);
-    return () => ws.removeEventListener("message", handler);
-  }, [wsInstance]);
-
   return (
     <GameContext.Provider value={{
       player, setPlayer,
@@ -234,7 +202,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
       eloDeltas, setEloDeltas,
       soloToken, setSoloToken,
       isDailyMode, setIsDailyMode,
-      rejoinSecret, setRejoinSecret,
       ws: wsInstance,
       connectWs, disconnectWs,
     }}>

@@ -20,7 +20,6 @@ import {
 import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
 import { sessionMiddleware } from "../app";
-import { verifyAnswer as verifyAnswerAI } from "./verifyAnswer";
 
 interface ExtWebSocket extends WebSocket {
   roomCode?: string;
@@ -32,12 +31,13 @@ interface ExtWebSocket extends WebSocket {
 type WSMessage =
   | { type: "create_room"; hostId: string; playerName: string; mode: Room["mode"]; language: Room["language"]; category: string; timeSeconds?: number; impossibleMode?: boolean }
   | { type: "join"; roomCode: string; playerId: string; playerName: string; language?: string }
-  | { type: "rejoin"; roomCode: string; playerId: string; rejoinSecret: string }
+  | { type: "rejoin"; roomCode: string; playerId: string }
   | { type: "ping" }
   | { type: "start_game"; roomCode: string; subcategory: string; customSubcategory?: boolean }
-  | { type: "answer_submitted"; roomCode: string; playerId: string; answer: string }
+  | { type: "answer_submitted"; roomCode: string; playerId: string; answer: string; valid: boolean; reason: string }
   | { type: "player_eliminated"; roomCode: string; playerId: string }
   | { type: "next_turn"; roomCode: string }
+  | { type: "game_over_request"; roomCode: string; winnerId: string; winnerName: string }
   | { type: "reset_room"; roomCode: string }
   | { type: "update_room_settings"; roomCode: string; playerId: string; category: string; timeSeconds: number; impossibleMode?: boolean }
   | { type: "kick_player"; roomCode: string; hostId: string; targetId: string }
@@ -50,28 +50,6 @@ const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const lobbyIntervals = new Map<string, ReturnType<typeof setInterval>>();
 const currentTurnStartedAt = new Map<string, number>();
-
-/**
- * Server-issued, per-seat rejoin secrets.
- * Key: `${roomCode}:${playerId}`. Value: UUID secret.
- * Generated at join/create, validated and rotated at rejoin.
- * Prevents anonymous seat hijacking via forged rejoin messages.
- */
-const rejoinSecrets = new Map<string, string>();
-
-function issueRejoinSecret(roomCode: string, playerId: string): string {
-  const secret = randomUUID();
-  rejoinSecrets.set(`${roomCode}:${playerId}`, secret);
-  return secret;
-}
-
-function peekRejoinSecret(roomCode: string, playerId: string): string | undefined {
-  return rejoinSecrets.get(`${roomCode}:${playerId}`);
-}
-
-function deleteRejoinSecret(roomCode: string, playerId: string): void {
-  rejoinSecrets.delete(`${roomCode}:${playerId}`);
-}
 
 function clearTurnTimer(roomCode: string): void {
   const t = turnTimers.get(roomCode);
@@ -99,15 +77,10 @@ function startLobbyInterval(roomCode: string): void {
   lobbyIntervals.set(roomCode, interval);
 }
 
-/**
- * Schedule the turn timeout for a player.
- * @param overrideDelayMs  If provided, uses this delay instead of the default (room.timeSeconds + 2) seconds.
- *                         Pass this when re-scheduling after a failed answer so the remaining time is preserved.
- */
-function scheduleTurnTimeout(roomCode: string, playerId: string, overrideDelayMs?: number): void {
+function scheduleTurnTimeout(roomCode: string, playerId: string): void {
   const room = getRoom(roomCode);
   if (!room || room.status !== "playing") return;
-  const delayMs = overrideDelayMs ?? (room.timeSeconds + 2) * 1000;
+  const delayMs = (room.timeSeconds + 2) * 1000;
   clearTurnTimer(roomCode);
   const timer = setTimeout(() => {
     turnTimers.delete(roomCode);
@@ -300,11 +273,9 @@ export function setupWebSocket(server: Server): WebSocketServer {
             }
             roomSockets.get(room.code)!.add(ws);
 
-            const hostSecret = issueRejoinSecret(room.code, msg.hostId);
             sendToSocket(ws, {
               type: "room_created",
               room: getRoom(room.code),
-              rejoinSecret: hostSecret,
             });
 
             startLobbyInterval(room.code);
@@ -328,13 +299,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
           }
           if (msg.language && msg.language !== room.language) {
             sendToSocket(ws, { type: "error", message: "wrong_language" });
-            return;
-          }
-          // Reject if the claimed playerId is already present in the room.
-          // This prevents an attacker from joining with the host's ID and passing
-          // subsequent ws.playerId === room.hostId checks.
-          if (room.players.some((p) => p.id === msg.playerId)) {
-            sendToSocket(ws, { type: "error", message: "Player ID already taken" });
             return;
           }
 
@@ -368,11 +332,9 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
             addPlayerToRoom(msg.roomCode, player);
 
-            const joinSecret = issueRejoinSecret(msg.roomCode, msg.playerId);
             sendToSocket(ws, {
               type: "room_state",
               room: getRoom(msg.roomCode),
-              rejoinSecret: joinSecret,
             });
 
             broadcastAll(msg.roomCode, {
@@ -388,12 +350,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "start_game": {
           const room = getRoom(msg.roomCode);
           if (!room) return;
-
-          // Only the host socket may start the game.
-          if (ws.playerId !== room.hostId) {
-            logger.warn({ playerId: ws.playerId, hostId: room.hostId }, "WS: unauthorized start_game attempt");
-            return;
-          }
 
           clearLobbyInterval(msg.roomCode);
 
@@ -429,105 +385,43 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
         case "answer_submitted": {
           const room = getRoom(msg.roomCode);
-          if (!room || room.status !== "playing") return;
+          if (!room) return;
 
-          // The sending socket must own the claimed playerId and be the current player.
-          if (ws.playerId !== msg.playerId) {
-            logger.warn({ wsPlayerId: ws.playerId, msgPlayerId: msg.playerId }, "WS: answer_submitted playerId mismatch");
-            return;
-          }
-          if (room.currentPlayerId !== msg.playerId) {
-            logger.warn({ currentPlayerId: room.currentPlayerId, msgPlayerId: msg.playerId }, "WS: answer_submitted not current player");
-            return;
-          }
+          broadcastAll(msg.roomCode, {
+            type: "answer_result",
+            playerId: msg.playerId,
+            answer: msg.answer,
+            valid: msg.valid,
+            reason: msg.reason,
+          });
 
-          const player = room.players.find((p) => p.id === msg.playerId);
-          if (!player || player.eliminated) return;
+          if (msg.valid) {
+            clearTurnTimer(msg.roomCode);
+            const answers = [...room.acceptedAnswers, msg.answer];
+            const player = room.players.find((p) => p.id === msg.playerId);
+            if (player) player.score += 1;
 
-          // Capture the turn start timestamp before the async gap so we can
-          // restore the remaining time if the answer is invalid.
-          const turnStart = currentTurnStartedAt.get(msg.roomCode) ?? Date.now();
-
-          // Pause the server-side timer while we wait for verification.
-          clearTurnTimer(msg.roomCode);
-
-          void (async () => {
-            const result = await verifyAnswerAI(
-              msg.answer,
-              room.subcategory ?? "",
-              room.acceptedAnswers,
-              room.language,
-            );
-
-            // Re-fetch room state — it may have changed during the async gap.
-            const currentRoom = getRoom(msg.roomCode);
-            if (!currentRoom || currentRoom.status !== "playing") return;
-            if (currentRoom.currentPlayerId !== msg.playerId) return;
-            const currentPlayer = currentRoom.players.find((p) => p.id === msg.playerId);
-            if (!currentPlayer || currentPlayer.eliminated) return;
-
-            // Broadcast the authoritative result to all players.
-            broadcastAll(msg.roomCode, {
-              type: "answer_result",
-              playerId: msg.playerId,
-              answer: msg.answer,
-              valid: result.valid,
-              reason: result.reason,
-            });
-
-            if (result.valid) {
-              const answers = [...currentRoom.acceptedAnswers, msg.answer];
-              currentPlayer.score += 1;
-
-              const nextPlayerId = getNextPlayer(currentRoom);
-              const roomUpdates: Partial<Room> = {
-                acceptedAnswers: answers,
-                currentPlayerId: nextPlayerId,
-                players: currentRoom.players,
-              };
-              if (currentRoom.impossibleMode) {
-                roomUpdates.timeSeconds = Math.max(7, currentRoom.timeSeconds - 1);
-              }
-              updateRoom(msg.roomCode, roomUpdates);
-
-              const tsTurnPassed = Date.now();
-              currentTurnStartedAt.set(msg.roomCode, tsTurnPassed);
-              broadcastAll(msg.roomCode, {
-                type: "turn_passed",
-                nextPlayerId,
-                turnStartedAt: tsTurnPassed,
-                room: getRoom(msg.roomCode),
-              });
-              if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
-            } else {
-              // Invalid answer: reschedule the turn timer for the remaining time.
-              const elapsed = Date.now() - turnStart;
-              const totalMs = (currentRoom.timeSeconds + 2) * 1000;
-              const remainingMs = Math.max(0, totalMs - elapsed);
-              if (remainingMs <= 0) {
-                // Time already expired during verification — eliminate the player.
-                currentPlayer.eliminated = true;
-                currentRoom.eliminationOrder.push(msg.playerId);
-                updateRoom(msg.roomCode, { players: currentRoom.players, eliminationOrder: currentRoom.eliminationOrder });
-                if (!checkAndEndGame(msg.roomCode)) {
-                  const next = getNextPlayer(currentRoom);
-                  updateRoom(msg.roomCode, { currentPlayerId: next });
-                  const ts = Date.now();
-                  currentTurnStartedAt.set(msg.roomCode, ts);
-                  broadcastAll(msg.roomCode, {
-                    type: "player_eliminated",
-                    playerId: msg.playerId,
-                    nextPlayerId: next,
-                    turnStartedAt: ts,
-                    room: getRoom(msg.roomCode),
-                  });
-                  if (next) scheduleTurnTimeout(msg.roomCode, next);
-                }
-              } else {
-                scheduleTurnTimeout(msg.roomCode, msg.playerId, remainingMs);
-              }
+            const nextPlayerId = getNextPlayer(room);
+            const roomUpdates: Partial<Room> = {
+              acceptedAnswers: answers,
+              currentPlayerId: nextPlayerId,
+              players: room.players,
+            };
+            if (room.impossibleMode) {
+              roomUpdates.timeSeconds = Math.max(7, room.timeSeconds - 1);
             }
-          })();
+            updateRoom(msg.roomCode, roomUpdates);
+
+            const tsTurnPassed = Date.now();
+            currentTurnStartedAt.set(msg.roomCode, tsTurnPassed);
+            broadcastAll(msg.roomCode, {
+              type: "turn_passed",
+              nextPlayerId,
+              turnStartedAt: tsTurnPassed,
+              room: getRoom(msg.roomCode),
+            });
+            if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
+          }
           break;
         }
 
@@ -535,12 +429,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
           const room = getRoom(msg.roomCode);
           if (!room || room.status !== "playing") return;
 
-          // Only the player whose turn it is can report their own elimination,
-          // and the sending socket must own that playerId.
-          if (ws.playerId !== msg.playerId) {
-            logger.warn({ wsPlayerId: ws.playerId, msgPlayerId: msg.playerId }, "WS: player_eliminated playerId mismatch");
-            return;
-          }
           if (room.currentPlayerId !== msg.playerId) return;
 
           const player = room.players.find((p) => p.id === msg.playerId);
@@ -571,14 +459,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
         case "next_turn": {
           const room = getRoom(msg.roomCode);
-          if (!room || room.status !== "playing") return;
-
-          // Only the current player's socket may advance the turn.
-          if (ws.playerId !== room.currentPlayerId) {
-            logger.warn({ wsPlayerId: ws.playerId, currentPlayerId: room.currentPlayerId }, "WS: unauthorized next_turn attempt");
-            return;
-          }
-
+          if (!room) return;
           clearTurnTimer(msg.roomCode);
           const nextPlayerId = getNextPlayer(room);
           updateRoom(msg.roomCode, { currentPlayerId: nextPlayerId });
@@ -594,15 +475,30 @@ export function setupWebSocket(server: Server): WebSocketServer {
           break;
         }
 
+        case "game_over_request": {
+          // Fallback end-of-game trigger (e.g. solo timer expiry redirect).
+          // Eliminate all active non-winner players in score order so checkAndEndGame
+          // can compute Elo from eliminationOrder correctly.
+          const room = getRoom(msg.roomCode);
+          if (!room || room.status !== "playing") return;
+          clearTurnTimer(msg.roomCode);
+
+          const activePlayers = room.players.filter((p) => !p.eliminated);
+          const nonWinners = activePlayers
+            .filter((p) => p.id !== msg.winnerId)
+            .sort((a, b) => a.score - b.score); // lowest score eliminated first
+          for (const p of nonWinners) {
+            p.eliminated = true;
+            room.eliminationOrder.push(p.id);
+          }
+          updateRoom(msg.roomCode, { players: room.players, eliminationOrder: room.eliminationOrder });
+          checkAndEndGame(msg.roomCode);
+          break;
+        }
+
         case "reset_room": {
           const oldRoom = getRoom(msg.roomCode);
           if (!oldRoom) return;
-
-          // Only the host socket may reset the room.
-          if (ws.playerId !== oldRoom.hostId) {
-            logger.warn({ wsPlayerId: ws.playerId, hostId: oldRoom.hostId }, "WS: unauthorized reset_room attempt");
-            return;
-          }
 
           clearTurnTimer(msg.roomCode);
 
@@ -644,27 +540,12 @@ export function setupWebSocket(server: Server): WebSocketServer {
           }
 
           clearLobbyInterval(msg.roomCode);
-          // Clear all old per-seat secrets; the old roomCode is gone.
-          for (const p of oldRoom.players) {
-            deleteRejoinSecret(msg.roomCode, p.id);
-          }
           deleteRoom(msg.roomCode);
 
-          // Issue fresh rejoin secrets for all continuing sockets and distribute them.
           broadcastAll(newRoom.code, {
             type: "room_reset",
             room: getRoom(newRoom.code),
           });
-
-          const newRoomSockets = roomSockets.get(newRoom.code);
-          if (newRoomSockets) {
-            for (const s of newRoomSockets) {
-              if (s.playerId && s.readyState === WebSocket.OPEN) {
-                const freshSecret = issueRejoinSecret(newRoom.code, s.playerId);
-                sendToSocket(s, { type: "rejoin_secret", rejoinSecret: freshSecret });
-              }
-            }
-          }
 
           startLobbyInterval(newRoom.code);
           break;
@@ -672,14 +553,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
 
         case "kick_player": {
           const room = getRoom(msg.roomCode);
-          if (!room || room.status !== "waiting") return;
-
-          // Verify the sending socket is actually the host.
-          if (ws.playerId !== room.hostId) {
-            logger.warn({ wsPlayerId: ws.playerId, hostId: room.hostId }, "WS: unauthorized kick_player attempt");
-            return;
-          }
-
+          if (!room || room.hostId !== msg.hostId || room.status !== "waiting") return;
           const sockets = roomSockets.get(msg.roomCode);
           if (sockets) {
             for (const s of sockets) {
@@ -689,7 +563,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
               }
             }
           }
-          deleteRejoinSecret(msg.roomCode, msg.targetId);
           removePlayerFromRoom(msg.roomCode, msg.targetId);
           if (sockets) {
             for (const s of sockets) {
@@ -711,12 +584,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "leave_room": {
           const room = getRoom(msg.roomCode);
           if (!room || room.status !== "waiting") return;
-          // Only the socket that owns the playerId may leave on its behalf.
-          if (ws.playerId !== msg.playerId) {
-            logger.warn({ wsPlayerId: ws.playerId, msgPlayerId: msg.playerId }, "WS: leave_room playerId mismatch");
-            return;
-          }
-          deleteRejoinSecret(msg.roomCode, msg.playerId);
           const wasHost = room.hostId === msg.playerId;
           removePlayerFromRoom(msg.roomCode, msg.playerId);
           const updated = getRoom(msg.roomCode);
@@ -744,13 +611,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "leave_game": {
           const room = getRoom(msg.roomCode);
           if (!room || room.status !== "playing") return;
-
-          // Only the socket that owns the playerId may leave on its behalf.
-          if (ws.playerId !== msg.playerId) {
-            logger.warn({ wsPlayerId: ws.playerId, msgPlayerId: msg.playerId }, "WS: leave_game playerId mismatch");
-            return;
-          }
-
           const leavingPlayer = room.players.find((p) => p.id === msg.playerId);
           if (!leavingPlayer || leavingPlayer.eliminated) return;
 
@@ -788,76 +648,27 @@ export function setupWebSocket(server: Server): WebSocketServer {
         }
 
         case "rejoin": {
+          clearDisconnectTimer(msg.roomCode, msg.playerId);
           const room = getRoom(msg.roomCode);
           if (!room) { sendToSocket(ws, { type: "error", message: "Room not found" }); return; }
           const rejoiningPlayer = room.players.find((p) => p.id === msg.playerId);
           if (!rejoiningPlayer) { sendToSocket(ws, { type: "error", message: "Player not found" }); return; }
-
-          // For authenticated players, the seat's userId must match the session.
-          // This prevents an attacker from claiming a disconnected authenticated
-          // player's seat even when no active socket is present.
-          if (rejoiningPlayer.userId) {
-            if (!ws.sessionUserId || ws.sessionUserId !== rejoiningPlayer.userId) {
-              logger.warn({ sessionUserId: ws.sessionUserId, playerUserId: rejoiningPlayer.userId }, "WS: rejoin session mismatch");
-              sendToSocket(ws, { type: "error", message: "Session mismatch" });
-              return;
-            }
-          }
-
-          // Validate the server-issued rejoin secret WITHOUT deleting it first.
-          // We only consume (delete) the stored secret after all checks pass.
-          // Failing early keeps the stored secret intact so the legitimate player
-          // can still reconnect after an attacker's failed attempt.
-          const storedSecret = peekRejoinSecret(msg.roomCode, msg.playerId);
-          if (!storedSecret || storedSecret !== msg.rejoinSecret) {
-            logger.warn({ playerId: msg.playerId }, "WS: rejoin rejected — invalid secret");
-            sendToSocket(ws, { type: "error", message: "Invalid rejoin secret" });
-            return;
-          }
-
-          // Prevent seat-stealing: reject if another active socket already owns this seat.
-          // Do NOT modify the stored secret here — the legitimate socket may need it later.
-          const existingSockets = roomSockets.get(msg.roomCode);
-          if (existingSockets) {
-            for (const s of existingSockets) {
-              if (s !== ws && s.playerId === msg.playerId && s.readyState === WebSocket.OPEN) {
-                logger.warn({ playerId: msg.playerId }, "WS: rejoin rejected — seat already active");
-                sendToSocket(ws, { type: "error", message: "Seat already active" });
-                return;
-              }
-            }
-          }
-
-          // All checks passed — now consume the old secret and issue a fresh one.
-          deleteRejoinSecret(msg.roomCode, msg.playerId);
-          clearDisconnectTimer(msg.roomCode, msg.playerId);
           ws.roomCode = msg.roomCode;
           ws.playerId = msg.playerId;
           if (!roomSockets.has(msg.roomCode)) roomSockets.set(msg.roomCode, new Set());
           roomSockets.get(msg.roomCode)!.add(ws);
-
-          // Issue a fresh secret so the old one cannot be replayed.
-          const newSecret = issueRejoinSecret(msg.roomCode, msg.playerId);
           const tsSynced = currentTurnStartedAt.get(msg.roomCode) ?? Date.now();
           sendToSocket(ws, {
             type: "game_state_sync",
             room: getRoom(msg.roomCode),
             turnStartedAt: tsSynced,
-            rejoinSecret: newSecret,
           });
           break;
         }
 
         case "update_room_settings": {
           const room = getRoom(msg.roomCode);
-          if (!room || room.status !== "waiting") return;
-
-          // Verify the sending socket is actually the host.
-          if (ws.playerId !== room.hostId) {
-            logger.warn({ wsPlayerId: ws.playerId, hostId: room.hostId }, "WS: unauthorized update_room_settings attempt");
-            return;
-          }
-
+          if (!room || room.hostId !== msg.playerId || room.status !== "waiting") return;
           updateRoom(msg.roomCode, { category: msg.category, timeSeconds: msg.timeSeconds, impossibleMode: msg.impossibleMode ?? false });
           broadcastAll(msg.roomCode, {
             type: "lobby_sync",
@@ -891,8 +702,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
           if (!p || p.eliminated) return;
 
           clearTurnTimer(roomCode);
-          // Player is permanently eliminated — they won't rejoin.
-          deleteRejoinSecret(roomCode, playerId);
           p.eliminated = true;
           r.eliminationOrder.push(playerId);
           updateRoom(roomCode, { players: r.players, eliminationOrder: r.eliminationOrder });
@@ -927,7 +736,6 @@ export function setupWebSocket(server: Server): WebSocketServer {
         if (sockets) {
           sockets.delete(ws);
           if (room.status === "waiting") {
-            deleteRejoinSecret(roomCode, playerId);
             removePlayerFromRoom(roomCode, playerId);
             const updated = getRoom(roomCode);
             if (updated && updated.players.length === 0) {
