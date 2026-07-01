@@ -37,9 +37,8 @@ import {
   isBotId,
   createBotState,
   getBotState,
-  botHasAnswersLeft,
-  incrementBotAnswers,
   generateBotAnswer,
+  verifyBotAnswer,
   randomBotName,
   removeBotState,
 } from "./botPlayer";
@@ -143,27 +142,53 @@ function scheduleBotTurn(roomCode: string, botId: string): void {
     const room = getRoom(roomCode);
     if (!room || room.status !== "playing" || room.currentPlayerId !== botId) return;
 
-    if (!botHasAnswersLeft(botId)) {
-      // Quota used up — let the existing turn timeout eliminate the bot naturally.
-      return;
-    }
-
     const state = getBotState(botId);
     if (!state) return;
 
     void (async () => {
+      // 1. Generate a candidate answer
       const answer = await generateBotAnswer(state, room.acceptedAnswers);
       if (!answer) return;
-      // Re-check after await
+
+      // Re-check after async generate
       const r = getRoom(roomCode);
       if (!r || r.status !== "playing" || r.currentPlayerId !== botId) return;
-      incrementBotAnswers(botId);
-      applyBotAnswer(roomCode, botId, answer);
+
+      // 2. Verify through the same judge as real players
+      const { valid, reason } = await verifyBotAnswer(answer, state.subcategory, r.acceptedAnswers, state.language);
+
+      // Re-check after async verify
+      const r2 = getRoom(roomCode);
+      if (!r2 || r2.status !== "playing" || r2.currentPlayerId !== botId) return;
+
+      if (valid) {
+        // Valid answer: clear timer, update room, advance turn — same as answer_submitted valid branch
+        applyBotAnswer(roomCode, botId, answer);
+      } else {
+        // Invalid answer: broadcast result then eliminate bot — same flow as real player invalid
+        broadcastAll(roomCode, { type: "answer_result", playerId: botId, answer, valid: false, reason });
+
+        clearTurnTimer(roomCode);
+        const player = r2.players.find((p) => p.id === botId);
+        if (!player || player.eliminated) return;
+        player.eliminated = true;
+        r2.eliminationOrder.push(botId);
+        updateRoom(roomCode, { players: r2.players, eliminationOrder: r2.eliminationOrder });
+
+        if (!checkAndEndGame(roomCode)) {
+          const nextPlayerId = getNextPlayer(r2);
+          updateRoom(roomCode, { currentPlayerId: nextPlayerId });
+          const ts = Date.now();
+          currentTurnStartedAt.set(roomCode, ts);
+          broadcastAll(roomCode, { type: "player_eliminated", playerId: botId, nextPlayerId, turnStartedAt: ts, room: getRoom(roomCode) });
+          if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
+        }
+      }
     })();
   }, delayMs);
 }
 
-/** Called 15s after a human joins a duel queue with no real match. Creates a bot opponent. */
+/** Called 10s after a human joins a duel queue with no real match. Creates a bot opponent. */
 async function spawnBotMatch(
   humanPlayerId: string,
   humanPlayerName: string,
@@ -890,7 +915,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
               const botTimer = setTimeout(() => {
                 queueBotTimers.delete(playerId);
                 void spawnBotMatch(playerId, playerName, userId, elo, ws, language);
-              }, 15_000);
+              }, 10_000);
               queueBotTimers.set(playerId, botTimer);
             }
 
