@@ -39,6 +39,8 @@ import {
   getBotState,
   generateBotAnswer,
   verifyBotAnswer,
+  botHasAnswersLeft,
+  incrementBotAnswers,
   randomBotName,
   removeBotState,
 } from "./botPlayer";
@@ -161,10 +163,12 @@ function scheduleBotTurn(roomCode: string, botId: string): void {
       const r2 = getRoom(roomCode);
       if (!r2 || r2.status !== "playing" || r2.currentPlayerId !== botId) return;
 
-      if (valid) {
-        // Valid answer: clear timer, update room, advance turn — same as answer_submitted valid branch
+      if (valid && botHasAnswersLeft(botId)) {
+        // Valid answer within quota: clear timer, update room, advance turn
+        incrementBotAnswers(botId);
         applyBotAnswer(roomCode, botId, answer);
       } else {
+        // Quota exhausted OR invalid answer: eliminate bot like a real player
         // Invalid answer: broadcast result then eliminate bot — same flow as real player invalid
         broadcastAll(roomCode, { type: "answer_result", playerId: botId, answer, valid: false, reason });
 
@@ -310,6 +314,7 @@ function scheduleTurnTimeout(roomCode: string, playerId: string): void {
         room: getRoom(roomCode),
       });
       if (next) scheduleTurnTimeout(roomCode, next);
+      if (next && isBotId(next)) scheduleBotTurn(roomCode, next);
     }
   }, delayMs);
   turnTimers.set(roomCode, timer);
@@ -628,6 +633,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
               room: getRoom(msg.roomCode),
             });
             if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
+            if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(msg.roomCode, nextPlayerId);
           }
           break;
         }
@@ -661,6 +667,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             room: getRoom(msg.roomCode),
           });
           if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
+          if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(msg.roomCode, nextPlayerId);
           break;
         }
 
@@ -679,6 +686,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
             room: getRoom(msg.roomCode),
           });
           if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
+          if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(msg.roomCode, nextPlayerId);
           break;
         }
 
@@ -840,6 +848,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 room: getRoom(msg.roomCode),
               });
               if (nextPlayerId) scheduleTurnTimeout(msg.roomCode, nextPlayerId);
+              if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(msg.roomCode, nextPlayerId);
             } else {
               broadcastAll(msg.roomCode, {
                 type: "player_eliminated",
@@ -849,6 +858,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 room: getRoom(msg.roomCode),
               });
               if (room.currentPlayerId) scheduleTurnTimeout(msg.roomCode, room.currentPlayerId);
+              if (room.currentPlayerId && isBotId(room.currentPlayerId)) scheduleBotTurn(msg.roomCode, room.currentPlayerId);
             }
           }
           break;
@@ -1097,6 +1107,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 room: getRoom(roomCode),
               });
               if (next) scheduleTurnTimeout(roomCode, next);
+              if (next && isBotId(next)) scheduleBotTurn(roomCode, next);
             } else {
               broadcastAll(roomCode, {
                 type: "player_left",
@@ -1104,6 +1115,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
                 room: getRoom(roomCode),
               });
               if (r.currentPlayerId) scheduleTurnTimeout(roomCode, r.currentPlayerId);
+              if (r.currentPlayerId && isBotId(r.currentPlayerId)) scheduleBotTurn(roomCode, r.currentPlayerId);
             }
           }
         }, 5_000);

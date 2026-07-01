@@ -7,6 +7,8 @@ export interface BotState {
   language: "en" | "tr";
   category: string;
   subcategory: string;
+  maxAnswers: number;
+  answersGiven: number;
 }
 
 const botStates = new Map<string, BotState>();
@@ -33,9 +35,23 @@ export function createBotState(
   category: string,
   subcategory: string,
 ): BotState {
-  const state: BotState = { botId, roomCode, language: lang, category, subcategory };
+  const state: BotState = {
+    botId, roomCode, language: lang, category, subcategory,
+    maxAnswers: 8 + Math.floor(Math.random() * 3), // 8–10 correct answers
+    answersGiven: 0,
+  };
   botStates.set(botId, state);
   return state;
+}
+
+export function botHasAnswersLeft(botId: string): boolean {
+  const s = botStates.get(botId);
+  return !!s && s.answersGiven < s.maxAnswers;
+}
+
+export function incrementBotAnswers(botId: string): void {
+  const s = botStates.get(botId);
+  if (s) s.answersGiven++;
 }
 
 export function getBotState(botId: string): BotState | undefined {
