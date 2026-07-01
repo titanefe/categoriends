@@ -33,6 +33,16 @@ import { openai } from "./openai";
 import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
 import { sessionMiddleware } from "../app";
+import {
+  isBotId,
+  createBotState,
+  getBotState,
+  botHasAnswersLeft,
+  incrementBotAnswers,
+  generateBotAnswer,
+  randomBotName,
+  removeBotState,
+} from "./botPlayer";
 
 interface ExtWebSocket extends WebSocket {
   roomCode?: string;
@@ -63,6 +73,8 @@ const roomSockets = new Map<string, Set<ExtWebSocket>>();
 
 const turnTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Key: playerId waiting in duel queue. Fires after 15s to spawn a bot match.
+const queueBotTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const lobbyIntervals = new Map<string, ReturnType<typeof setInterval>>();
 const currentTurnStartedAt = new Map<string, number>();
 
@@ -90,6 +102,159 @@ function startLobbyInterval(roomCode: string): void {
     broadcastAll(roomCode, { type: "lobby_sync", room: r });
   }, 3_000);
   lobbyIntervals.set(roomCode, interval);
+}
+
+/** Apply a valid answer server-side (used for bot turns). */
+function applyBotAnswer(roomCode: string, botId: string, answer: string): void {
+  const room = getRoom(roomCode);
+  if (!room || room.status !== "playing" || room.currentPlayerId !== botId) return;
+
+  clearTurnTimer(roomCode);
+  const answers = [...room.acceptedAnswers, answer];
+  const player = room.players.find((p) => p.id === botId);
+  if (player) player.score += 1;
+
+  const nextPlayerId = getNextPlayer(room);
+  updateRoom(roomCode, { acceptedAnswers: answers, currentPlayerId: nextPlayerId, players: room.players });
+
+  const ts = Date.now();
+  currentTurnStartedAt.set(roomCode, ts);
+  broadcastAll(roomCode, {
+    type: "answer_result",
+    playerId: botId,
+    answer,
+    valid: true,
+    reason: "",
+  });
+  broadcastAll(roomCode, {
+    type: "turn_passed",
+    nextPlayerId,
+    turnStartedAt: ts,
+    room: getRoom(roomCode),
+  });
+  if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
+  if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(roomCode, nextPlayerId);
+}
+
+/** Schedule a bot's next turn after a random 8–12s delay. */
+function scheduleBotTurn(roomCode: string, botId: string): void {
+  const delayMs = (8 + Math.random() * 4) * 1000; // 8–12s
+  setTimeout(() => {
+    const room = getRoom(roomCode);
+    if (!room || room.status !== "playing" || room.currentPlayerId !== botId) return;
+
+    if (!botHasAnswersLeft(botId)) {
+      // Quota used up — let the existing turn timeout eliminate the bot naturally.
+      return;
+    }
+
+    const state = getBotState(botId);
+    if (!state) return;
+
+    void (async () => {
+      const answer = await generateBotAnswer(state, room.acceptedAnswers);
+      if (!answer) return;
+      // Re-check after await
+      const r = getRoom(roomCode);
+      if (!r || r.status !== "playing" || r.currentPlayerId !== botId) return;
+      incrementBotAnswers(botId);
+      applyBotAnswer(roomCode, botId, answer);
+    })();
+  }, delayMs);
+}
+
+/** Called 15s after a human joins a duel queue with no real match. Creates a bot opponent. */
+async function spawnBotMatch(
+  humanPlayerId: string,
+  humanPlayerName: string,
+  humanUserId: string | null,
+  humanElo: number,
+  humanWs: ExtWebSocket,
+  language: QueueLang,
+): Promise<void> {
+  // Remove human from queue so a real player can't also match them
+  leaveQueue("duel", language, humanPlayerId);
+
+  // Pick category + subcategory
+  const QUICK_CATEGORIES_EN = ["Animals", "Film & TV", "Music", "Food & Drink", "Sports", "Games", "Geography", "Science"];
+  const QUICK_CATEGORIES_TR = ["Hayvanlar", "Film & Dizi", "Müzik", "Yiyecek & İçecek", "Spor", "Oyunlar", "Coğrafya", "Bilim"];
+  const catEnKeys = ["Animals", "Film & TV", "Music", "Food & Drink", "Sports", "Games", "Geography", "Science"];
+  const cats = language === "tr" ? QUICK_CATEGORIES_TR : QUICK_CATEGORIES_EN;
+  const randomIdx = Math.floor(Math.random() * cats.length);
+  const category = cats[randomIdx];
+  const categoryKey = catEnKeys[randomIdx];
+  const poolKey = CATEGORY_TO_KEY[categoryKey] ?? categoryKey;
+  const pool = SUBCATEGORY_POOLS[poolKey];
+  const poolOptions: string[] = pool ? (language === "tr" ? pool.tr : pool.en) : [];
+  let subcategory = poolOptions.length > 0
+    ? poolOptions[Math.floor(Math.random() * poolOptions.length)]
+    : category;
+  try {
+    if (poolOptions.length > 0 && Math.random() >= 0.5) {
+      const poolList = poolOptions.join(", ");
+      const systemPrompt = language === "tr"
+        ? `Sen bir kelime oyunu asistanısın. "${category}" kategorisi için GENİŞ ve BASİT bir alt kategori üret. Kısa (2-4 kelime), oynanabilir olmalı. Sadece alt kategoriyi yaz. Mevcut liste (tekrar ETME): ${poolList}`
+        : `You are a word game assistant. Generate a BROAD, SIMPLE sub-category for "${category}". Keep it short (2-4 words), playable. Output ONLY the sub-category name. Existing list (do NOT repeat): ${poolList}`;
+      const userPrompt = language === "tr"
+        ? `"${category}" için listede olmayan yeni bir alt kategori üret.`
+        : `Generate a fresh sub-category for "${category}" not in the existing list.`;
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini", max_tokens: 30, temperature: 1.2,
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+      });
+      subcategory = completion.choices[0]?.message?.content?.trim() ?? subcategory;
+    }
+  } catch { /* use pool pick */ }
+
+  // Create bot ID + name
+  const botId = `bot_${randomUUID()}`;
+  const botName = randomBotName(language);
+  const botElo = 800 + Math.floor(Math.random() * 400); // 800–1200
+
+  // Create room with human as host
+  const room = createRoom(humanPlayerId, "duel", language, category, 15, false, true);
+  roomSockets.set(room.code, new Set());
+
+  // Add human player
+  addPlayerToRoom(room.code, { id: humanPlayerId, name: humanPlayerName, score: 0, eliminated: false, userId: humanUserId, elo: humanElo });
+  humanWs.roomCode = room.code;
+  humanWs.playerId = humanPlayerId;
+  roomSockets.get(room.code)!.add(humanWs);
+
+  // Add bot player (no socket — bot never joins the socket set)
+  addPlayerToRoom(room.code, { id: botId, name: botName, score: 0, eliminated: false, userId: null, elo: botElo });
+
+  // Create bot state
+  createBotState(botId, room.code, language, category, subcategory);
+
+  // Shuffle turn order
+  const turnOrder = [humanPlayerId, botId];
+  if (Math.random() < 0.5) turnOrder.reverse();
+  const firstPlayerId = turnOrder[0];
+
+  updateRoom(room.code, {
+    status: "playing",
+    subcategory,
+    customSubcategory: false,
+    acceptedAnswers: [],
+    turnOrder,
+    currentPlayerId: firstPlayerId,
+    eliminationOrder: [],
+  });
+
+  const tsStart = Date.now();
+  currentTurnStartedAt.set(room.code, tsStart);
+
+  broadcastAll(room.code, {
+    type: "match_found",
+    room: getRoom(room.code),
+    subcategory,
+    firstPlayerId,
+    turnStartedAt: tsStart,
+  });
+
+  scheduleTurnTimeout(room.code, firstPlayerId);
+  if (isBotId(firstPlayerId)) scheduleBotTurn(room.code, firstPlayerId);
 }
 
 function scheduleTurnTimeout(roomCode: string, playerId: string): void {
@@ -720,10 +885,25 @@ export function setupWebSocket(server: Server): WebSocketServer {
               sendToSocket(entry.ws, { type: "queue_update", count: q.length, required: req });
             }
 
+            // Schedule a 15s bot fallback for 1v1 duel mode only
+            if (mode === "duel") {
+              const botTimer = setTimeout(() => {
+                queueBotTimers.delete(playerId);
+                void spawnBotMatch(playerId, playerName, userId, elo, ws, language);
+              }, 15_000);
+              queueBotTimers.set(playerId, botTimer);
+            }
+
             // Check if we have enough players to start
             if (isQueueFull(mode, language)) {
               const matched = popMatch(mode, language);
               if (!matched) return;
+
+              // Cancel bot timers for matched players
+              for (const entry of matched) {
+                const t = queueBotTimers.get(entry.playerId);
+                if (t !== undefined) { clearTimeout(t); queueBotTimers.delete(entry.playerId); }
+              }
 
               // Generate a random subcategory
               const QUICK_CATEGORIES_EN = ["Animals", "Film & TV", "Music", "Food & Drink", "Sports", "Games", "Geography", "Science"];
@@ -830,6 +1010,9 @@ export function setupWebSocket(server: Server): WebSocketServer {
         case "leave_queue": {
           const { mode, language, playerId } = msg;
           leaveQueue(mode, language, playerId);
+          // Cancel any pending bot-spawn timer for this player
+          const bt = queueBotTimers.get(playerId);
+          if (bt !== undefined) { clearTimeout(bt); queueBotTimers.delete(playerId); }
           const q = getQueue(mode, language);
           const req = getRequired(mode);
           for (const entry of q) {
@@ -848,7 +1031,9 @@ export function setupWebSocket(server: Server): WebSocketServer {
       // Remove from matchmaking queues if applicable
       if (ws.playerId && !ws.roomCode) {
         leaveAllQueues(ws.playerId);
-        // Notify remaining queue members (iterate all queues via leaveAllQueues already removed them)
+        // Cancel any pending bot-spawn timer
+        const bt = queueBotTimers.get(ws.playerId);
+        if (bt !== undefined) { clearTimeout(bt); queueBotTimers.delete(ws.playerId); }
       }
 
       const roomCode = ws.roomCode;
