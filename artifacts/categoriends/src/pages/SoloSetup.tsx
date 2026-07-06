@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame } from "@/context/GameContext";
-import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
+import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR, RANDOM_CATEGORY_EN, RANDOM_CATEGORY_TR } from "@/lib/constants";
 import { useGenerateSubcategory } from "@workspace/api-client-react";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
@@ -18,14 +18,19 @@ export default function SoloSetup() {
   const [error, setError] = useState("");
   const isImpossible = timeSeconds === IMPOSSIBLE_SENTINEL;
 
+  const randomLabel = lang === "en" ? RANDOM_CATEGORY_EN : RANDOM_CATEGORY_TR;
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
+  const allCategories = [randomLabel, ...categories];
   const generateMutation = useGenerateSubcategory();
 
   async function handleStart() {
-    const category = custom.trim() || selected;
+    let category = custom.trim() || selected;
     if (!category) {
       setError(t("setup.error.selectCategory"));
       return;
+    }
+    if (category === randomLabel) {
+      category = MAIN_CATEGORIES_EN[Math.floor(Math.random() * MAIN_CATEGORIES_EN.length)];
     }
     setError("");
 
@@ -97,14 +102,16 @@ export default function SoloSetup() {
         <p className="text-muted-foreground text-sm mb-6">{t("setup.soloMode")}</p>
 
         <div className="grid grid-cols-2 gap-2 mb-5">
-          {categories.map((cat) => (
+          {allCategories.map((cat) => (
             <button
               key={cat}
               data-testid={`button-category-${cat}`}
               onClick={() => { setSelected(cat); setCustom(""); }}
               className={`py-3 px-2 rounded-lg text-sm font-medium border transition-all active:scale-[0.97] ${
                 selected === cat && !custom
-                  ? "border-primary bg-primary/15 text-primary"
+                  ? cat === randomLabel
+                    ? "border-accent bg-accent/15 text-accent"
+                    : "border-primary bg-primary/15 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
               }`}
             >
