@@ -5,6 +5,16 @@ import { useGame } from "@/context/GameContext";
 import { useAuth } from "@/context/AuthContext";
 import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
 
+function useDisplayName(playerId: string | undefined, playerName: string | undefined) {
+  const { t } = useTranslation();
+  return (p: { id: string; name: string }): string => {
+    const guestDefault = t("game.soloPlayerName");
+    if (p.id === playerId) return guestDefault;
+    if (p.name === guestDefault) return t("game.opponentName");
+    return p.name;
+  };
+}
+
 interface DailySubmitResult {
   saved: boolean;
   attemptsLeft: number;
@@ -16,6 +26,7 @@ export default function Result() {
   const { t } = useTranslation();
   const { room, gameState, player, setRoom, setGameState, setEloDeltas, eloDeltas, soloToken, setSoloToken, isDailyMode, setIsDailyMode, disconnectWs, ws } = useGame();
   const { user, refetch: refetchAuth } = useAuth();
+  const displayName = useDisplayName(player?.id, player?.name);
   const [, setLocation] = useLocation();
 
   const isSolo = room?.mode === "solo";
@@ -161,7 +172,7 @@ export default function Result() {
                 className="text-4xl font-bold text-primary neon-text mb-2"
                 style={{ fontFamily: "'Space Mono', monospace" }}
               >
-                {winner.name}
+                {displayName(winner)}
               </p>
               {isSolo && (
                 <>
@@ -263,7 +274,7 @@ export default function Result() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono text-muted-foreground w-4">{idx + 1}.</span>
                         <span className={`text-sm font-medium ${p.eliminated ? "line-through text-muted-foreground/50" : ""}`}>
-                          {p.name}
+                          {displayName(p)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">

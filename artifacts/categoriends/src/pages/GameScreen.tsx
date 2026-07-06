@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useVerifyAnswer } from "@workspace/api-client-react";
 
 type AnimState = "idle" | "accepted" | "rejected";
-type GameOverOverlay = { winnerName: string } | null;
+type GameOverOverlay = { winnerId: string | null; winnerName: string } | null;
 
 export default function GameScreen() {
   const { t, lang } = useTranslation();
@@ -45,6 +45,13 @@ export default function GameScreen() {
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { playerRef.current = player; }, [player]);
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
+
+  const guestDefault = t("game.soloPlayerName");
+  function displayName(p: { id: string; name: string }): string {
+    if (p.id === player?.id) return guestDefault;
+    if (p.name === guestDefault) return t("game.opponentName");
+    return p.name;
+  }
 
   const isSolo = room?.mode === "solo";
   const isMyTurn = gameState?.currentPlayerId === player?.id;
@@ -231,7 +238,7 @@ export default function GameScreen() {
         if (data.type === "game_over") {
           if (timerRef.current) clearInterval(timerRef.current);
           setEloDeltas(data.eloDeltas ?? null);
-          setGameOverOverlay({ winnerName: data.winnerName ?? "Nobody" });
+          setGameOverOverlay({ winnerId: data.winnerId ?? null, winnerName: data.winnerName ?? "Nobody" });
           setTimeout(() => setLocation("/result"), 2200);
         }
         if (data.type === "answer_result") {
@@ -240,9 +247,13 @@ export default function GameScreen() {
             timerPausedRef.current = false;
           } else {
             // Another player's answer — show a brief toast
-            const name = roomRef.current?.players?.find((p) => p.id === data.playerId)?.name ?? "?";
+            const p = roomRef.current?.players?.find((p) => p.id === data.playerId);
+            const gd = t("game.soloPlayerName");
+            const resolvedName = p
+              ? (p.name === gd ? t("game.opponentName") : p.name)
+              : "?";
             if (liveToastTimerRef.current) clearTimeout(liveToastTimerRef.current);
-            setLiveToast({ playerName: name, answer: data.answer, valid: data.valid });
+            setLiveToast({ playerName: resolvedName, answer: data.answer, valid: data.valid });
             liveToastTimerRef.current = setTimeout(() => setLiveToast(null), 2200);
           }
         }
@@ -384,7 +395,12 @@ export default function GameScreen() {
           {t("result.title")}
         </p>
         <h1 className="text-5xl font-bold text-primary neon-text relative z-10" style={{ fontFamily: "'Space Mono', monospace" }}>
-          {gameOverOverlay.winnerName}
+          {(() => {
+            const { winnerId, winnerName } = gameOverOverlay;
+            if (!winnerId) return winnerName;
+            const wp = room?.players?.find((p) => p.id === winnerId);
+            return wp ? displayName(wp) : winnerName;
+          })()}
         </h1>
         <p className="text-xl text-foreground mt-3 relative z-10">{t("game.won")}</p>
         <p className="text-xs text-muted-foreground font-mono mt-8 relative z-10">{t("game.goingToResults")}</p>
@@ -477,7 +493,7 @@ export default function GameScreen() {
               ? t("game.checking")
               : myTurn
               ? (isDangerous ? t("game.hurry") : t("game.yourTurn"))
-              : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
+              : `${t("game.waiting")} ${currentPlayer ? displayName(currentPlayer) : ""}...`}
           </span>
           <span
             data-testid="text-timer"
@@ -509,7 +525,7 @@ export default function GameScreen() {
               <div className={`w-1.5 h-1.5 rounded-full ${
                 p.eliminated ? "bg-destructive/40" : gameState.currentPlayerId === p.id ? "bg-primary" : "bg-muted-foreground/40"
               }`} />
-              {p.name}
+              {displayName(p)}
               {p.eliminated && <span className="ml-1">{t("game.eliminated")}</span>}
             </div>
           ))}
@@ -558,7 +574,7 @@ export default function GameScreen() {
           {/* Mini timer badge above input */}
           <div className="px-4 pt-1 flex items-center justify-between">
             <span className="text-xs text-muted-foreground font-mono">
-              {myTurn ? t("game.yourTurn") : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
+              {myTurn ? t("game.yourTurn") : `${t("game.waiting")} ${currentPlayer ? displayName(currentPlayer) : ""}...`}
             </span>
             <span
               className={`text-sm font-bold font-mono px-2.5 py-0.5 rounded-full border transition-colors ${
