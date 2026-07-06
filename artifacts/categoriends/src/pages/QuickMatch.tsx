@@ -206,7 +206,7 @@ export default function QuickMatch() {
             onClick={() => handleSelectMode("duel")}
             className="w-full py-5 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary flex flex-col items-center gap-1"
           >
-            <span className="text-xl">⚔️ {t("quickmatch.mode1v1")}</span>
+            <span className="text-xl">{t("quickmatch.mode1v1")}</span>
             <span className="text-sm font-normal opacity-80">{t("quickmatch.desc1v1")}</span>
           </button>
 
@@ -214,7 +214,7 @@ export default function QuickMatch() {
             onClick={() => handleSelectMode("party4")}
             className="w-full py-5 rounded-xl font-semibold text-lg border border-primary/40 text-primary hover:bg-primary/10 hover:border-primary active:scale-[0.98] transition-all flex flex-col items-center gap-1"
           >
-            <span className="text-xl">🎉 {t("quickmatch.mode4p")}</span>
+            <span className="text-xl">{t("quickmatch.mode4p")}</span>
             <span className="text-sm font-normal opacity-80">{t("quickmatch.desc4p")}</span>
           </button>
         </div>

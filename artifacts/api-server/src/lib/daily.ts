@@ -5,15 +5,15 @@ export interface DailyCategory {
 
 const DAILY_CATEGORIES: DailyCategory[] = [
   { tr: "Pizza malzemeleri", en: "Pizza Toppings" },
-  { tr: "Okul \u00e7antas\u0131nda bulunacak \u015feyler", en: "Things in a School Bag" },
-  { tr: "M\u00fczik enstr\u00fcmanlar\u0131", en: "Musical Instruments" },
-  { tr: "Spor markalar\u0131", en: "Sports Brands" },
-  { tr: "Bir kad\u0131na al\u0131nabilecek hediyeler", en: "Gifts for Women" },
-  { tr: "Kahvalt\u0131 yiyecekleri", en: "Breakfast Foods" },
+  { tr: "Okul çantasında bulunacak şeyler", en: "Things in a School Bag" },
+  { tr: "Müzik enstrümanları", en: "Musical Instruments" },
+  { tr: "Spor markaları", en: "Sports Brands" },
+  { tr: "Çiçek türleri", en: "Types of Flowers" },
   { tr: "Olimpiyatlarda olan sporlar", en: "Olympic Sports" },
-  { tr: "K\u00f6t\u00fc kokan \u015feyler", en: "Things That Smell Bad" },
-  { tr: "Giyim markalar\u0131", en: "Clothing Brands" },
-  { tr: "\u00c7i\u00e7ek t\u00fcrleri", en: "Types of Flowers" },
+  { tr: "Kahvaltı yiyecekleri", en: "Breakfast Foods" },
+  { tr: "Bir kadına alınabilecek hediyeler", en: "Gifts for Women" },
+  { tr: "Kötü kokan şeyler", en: "Things That Smell Bad" },
+  { tr: "Giyim markaları", en: "Clothing Brands" },
 ];
 
 const START_MS = Date.UTC(2026, 5, 23); // 2026-06-23 UTC (month is 0-indexed)

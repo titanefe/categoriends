@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useTranslation } from "@/i18n/translations";
 import { useGame, type GameMode, type Room, type Player } from "@/context/GameContext";
 import { useAuth } from "@/context/AuthContext";
-import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR } from "@/lib/constants";
+import { MAIN_CATEGORIES_EN, MAIN_CATEGORIES_TR, RANDOM_CATEGORY_EN, RANDOM_CATEGORY_TR } from "@/lib/constants";
 
 const TIME_OPTIONS = [10, 15, 20, 30, 45, 60];
 const IMPOSSIBLE_SENTINEL = -1;
@@ -21,7 +21,9 @@ export default function CreateRoom() {
   const [error, setError] = useState("");
   const isImpossible = timeSeconds === IMPOSSIBLE_SENTINEL;
 
+  const randomLabel = lang === "en" ? RANDOM_CATEGORY_EN : RANDOM_CATEGORY_TR;
   const categories = lang === "en" ? MAIN_CATEGORIES_EN : MAIN_CATEGORIES_TR;
+  const allCategories = [randomLabel, ...categories];
 
   useEffect(() => {
     if (!ws) return;
@@ -42,8 +44,11 @@ export default function CreateRoom() {
   }, [ws, setRoom, setLocation, room?.timeSeconds]);
 
   function handleCreate() {
-    const category = custom.trim() || selected;
+    let category = custom.trim() || selected;
     if (!category) { setError(t("setup.error.selectCategory")); return; }
+    if (category === randomLabel) {
+      category = MAIN_CATEGORIES_EN[Math.floor(Math.random() * MAIN_CATEGORIES_EN.length)];
+    }
     if (!name.trim()) { setError(t("setup.error.enterName")); return; }
     setError("");
 
@@ -155,13 +160,17 @@ export default function CreateRoom() {
         <div className="mb-5">
           <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">{t("setup.chooseCategory")}</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
-            {categories.map((cat) => (
+            {allCategories.map((cat) => (
               <button
                 key={cat}
                 data-testid={`button-category-${cat}`}
                 onClick={() => { setSelected(cat); setCustom(""); }}
                 className={`py-2.5 px-2 rounded-lg text-xs font-medium border transition-all ${
-                  selected === cat && !custom ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground hover:border-primary/50"
+                  selected === cat && !custom
+                    ? cat === randomLabel
+                      ? "border-accent bg-accent/15 text-accent"
+                      : "border-primary bg-primary/15 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
               >
                 {cat}
