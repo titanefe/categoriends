@@ -137,59 +137,74 @@ function applyBotAnswer(roomCode: string, botId: string, answer: string): void {
   if (nextPlayerId && isBotId(nextPlayerId)) scheduleBotTurn(roomCode, nextPlayerId);
 }
 
-/** Schedule a bot's next turn after a random 8–12s delay. */
+const BOT_MIN_THINK_MS = 5_000;
+const BOT_MAX_THINK_MS = 10_000;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
+
+/**
+ * Play a bot turn. The answer is generated and judged right away (OpenAI can
+ * take a few seconds), then the bot "types" it after a human-looking 5–10s
+ * from the start of its turn — well inside the turn time limit.
+ */
 function scheduleBotTurn(roomCode: string, botId: string): void {
-  const delayMs = (8 + Math.random() * 4) * 1000; // 8–12s
-  setTimeout(() => {
-    const room = getRoom(roomCode);
-    if (!room || room.status !== "playing" || room.currentPlayerId !== botId) return;
+  const turnStart = Date.now();
+  const thinkMs = BOT_MIN_THINK_MS + Math.random() * (BOT_MAX_THINK_MS - BOT_MIN_THINK_MS);
+  const stillBotsTurn = () => {
+    const r = getRoom(roomCode);
+    return r && r.status === "playing" && r.currentPlayerId === botId ? r : null;
+  };
 
+  void (async () => {
+    const room = stillBotsTurn();
     const state = getBotState(botId);
-    if (!state) return;
+    if (!room || !state) return;
 
-    void (async () => {
-      // 1. Generate a candidate answer
-      const answer = await generateBotAnswer(state, room.acceptedAnswers);
-      if (!answer) return;
+    // 1. Generate a candidate answer (one retry if OpenAI fails or returns nothing)
+    let answer = await generateBotAnswer(state, room.acceptedAnswers);
+    if (!answer && stillBotsTurn()) answer = await generateBotAnswer(state, room.acceptedAnswers);
+    if (!answer) {
+      logger.warn({ roomCode, botId }, "Bot could not produce an answer");
+      return; // turn timer will eliminate the bot as usual
+    }
 
-      // Re-check after async generate
-      const r = getRoom(roomCode);
-      if (!r || r.status !== "playing" || r.currentPlayerId !== botId) return;
+    const r = stillBotsTurn();
+    if (!r) return;
 
-      // 2. Verify through the same judge as real players
-      const { valid, reason } = await verifyBotAnswer(answer, state.subcategory, r.acceptedAnswers, state.language);
+    // 2. Verify through the same judge as real players
+    const { valid, reason } = await verifyBotAnswer(answer, state.subcategory, r.acceptedAnswers, state.language);
 
-      // Re-check after async verify
-      const r2 = getRoom(roomCode);
-      if (!r2 || r2.status !== "playing" || r2.currentPlayerId !== botId) return;
+    // 3. Wait out the rest of the bot's "thinking" time, then play
+    await sleep(thinkMs - (Date.now() - turnStart));
+    const r2 = stillBotsTurn();
+    if (!r2) return;
 
-      if (valid && botHasAnswersLeft(botId)) {
-        // Valid answer within quota: clear timer, update room, advance turn
-        incrementBotAnswers(botId);
-        applyBotAnswer(roomCode, botId, answer);
-      } else {
-        // Quota exhausted OR invalid answer: eliminate bot like a real player
-        // Invalid answer: broadcast result then eliminate bot — same flow as real player invalid
-        broadcastAll(roomCode, { type: "answer_result", playerId: botId, answer, valid: false, reason });
+    if (valid && botHasAnswersLeft(botId)) {
+      // Valid answer within quota: clear timer, update room, advance turn
+      incrementBotAnswers(botId);
+      applyBotAnswer(roomCode, botId, answer);
+    } else {
+      // Quota exhausted OR invalid answer: eliminate bot like a real player
+      // Invalid answer: broadcast result then eliminate bot — same flow as real player invalid
+      broadcastAll(roomCode, { type: "answer_result", playerId: botId, answer, valid: false, reason });
 
-        clearTurnTimer(roomCode);
-        const player = r2.players.find((p) => p.id === botId);
-        if (!player || player.eliminated) return;
-        player.eliminated = true;
-        r2.eliminationOrder.push(botId);
-        updateRoom(roomCode, { players: r2.players, eliminationOrder: r2.eliminationOrder });
+      clearTurnTimer(roomCode);
+      const player = r2.players.find((p) => p.id === botId);
+      if (!player || player.eliminated) return;
+      player.eliminated = true;
+      r2.eliminationOrder.push(botId);
+      updateRoom(roomCode, { players: r2.players, eliminationOrder: r2.eliminationOrder });
 
-        if (!checkAndEndGame(roomCode)) {
-          const nextPlayerId = getNextPlayer(r2);
-          updateRoom(roomCode, { currentPlayerId: nextPlayerId });
-          const ts = Date.now();
-          currentTurnStartedAt.set(roomCode, ts);
-          broadcastAll(roomCode, { type: "player_eliminated", playerId: botId, nextPlayerId, turnStartedAt: ts, room: getRoom(roomCode) });
-          if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
-        }
+      if (!checkAndEndGame(roomCode)) {
+        const nextPlayerId = getNextPlayer(r2);
+        updateRoom(roomCode, { currentPlayerId: nextPlayerId });
+        const ts = Date.now();
+        currentTurnStartedAt.set(roomCode, ts);
+        broadcastAll(roomCode, { type: "player_eliminated", playerId: botId, nextPlayerId, turnStartedAt: ts, room: getRoom(roomCode) });
+        if (nextPlayerId) scheduleTurnTimeout(roomCode, nextPlayerId);
       }
-    })();
-  }, delayMs);
+    }
+  })();
 }
 
 /** Called 10s after a human joins a duel queue with no real match. Creates a bot opponent. */
