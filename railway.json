@@ -1,0 +1,16 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm --filter @workspace/api-server run build",
+    "watchPatterns": ["artifacts/api-server/**", "lib/**", "pnpm-lock.yaml", "railway.json"]
+  },
+  "deploy": {
+    "preDeployCommand": ["pnpm --filter @workspace/db run push"],
+    "startCommand": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
+    "healthcheckPath": "/api/healthz",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}

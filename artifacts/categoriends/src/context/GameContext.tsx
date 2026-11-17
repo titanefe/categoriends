@@ -103,8 +103,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }
 
   function openConnection(onOpen?: (ws: WebSocket) => void): WebSocket {
+    // In production the game server lives on its own subdomain
+    // (VITE_WS_URL, e.g. wss://api.categoriends.com/ws); locally it's same-host.
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const wsUrl =
+      (import.meta.env.VITE_WS_URL as string | undefined) ||
+      `${protocol}//${window.location.host}/ws`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

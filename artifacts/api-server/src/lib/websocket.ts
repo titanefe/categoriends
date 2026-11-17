@@ -32,7 +32,7 @@ import { SUBCATEGORY_POOLS, CATEGORY_TO_KEY } from "./subcategoryPools";
 import { openai } from "./openai";
 import { duelEloDelta, partyEloDeltas } from "./elo";
 import { logger } from "./logger";
-import { sessionMiddleware } from "../app";
+import { sessionMiddleware, isOriginAllowed } from "../app";
 import {
   isBotId,
   createBotState,
@@ -429,7 +429,13 @@ function checkAndEndGame(roomCode: string): boolean {
 }
 
 export function setupWebSocket(server: Server): WebSocketServer {
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({
+    server,
+    path: "/ws",
+    // Reject connections opened from other websites (the session cookie is
+    // shared across *.categoriends.com, so only our own site may use it).
+    verifyClient: ({ origin }: { origin?: string }) => isOriginAllowed(origin),
+  });
 
   wss.on("connection", (ws: ExtWebSocket, req: IncomingMessage) => {
     logger.info({ ip: req.socket.remoteAddress }, "WS client connected");

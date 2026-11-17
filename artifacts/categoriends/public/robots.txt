@@ -6,4 +6,4 @@ Disallow: /game
 Disallow: /result
 Disallow: /room/
 
-Sitemap: https://categoriends.replit.app/sitemap.xml
+Sitemap: https://categoriends.com/sitemap.xml

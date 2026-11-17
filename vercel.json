@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @workspace/categoriends run build",
+  "outputDirectory": "artifacts/categoriends/dist/public",
+  "build": {
+    "env": {
+      "VITE_WS_URL": "wss://api.categoriends.com/ws"
+    }
+  },
+  "redirects": [
+    { "source": "/:path*", "has": [{ "type": "host", "value": "www.categoriends.com" }], "destination": "https://categoriends.com/:path*", "permanent": true }
+  ],
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api-production-1bb4a482.up.railway.app/api/:path*" },
+    { "source": "/daily", "destination": "/daily.html" },
+    { "source": "/solo", "destination": "/solo.html" },
+    { "source": "/room/create", "destination": "/room-create.html" },
+    { "source": "/room/join", "destination": "/room-join.html" },
+    { "source": "/tr", "destination": "/tr.html" },
+    { "source": "/tr/:path*", "destination": "/tr.html" },
+    { "source": "/en", "destination": "/en.html" },
+    { "source": "/en/:path*", "destination": "/en.html" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}
