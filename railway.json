@@ -3,7 +3,7 @@
   "build": {
     "builder": "RAILPACK",
     "buildCommand": "pnpm --filter @workspace/api-server run build",
-    "watchPatterns": ["artifacts/api-server/**", "lib/**", "pnpm-lock.yaml", "railway.json"]
+    "watchPatterns": ["artifacts/api-server/**", "lib/**", "pnpm-lock.yaml", "package.json", "pnpm-workspace.yaml", "railway.json"]
   },
   "deploy": {
     "preDeployCommand": ["pnpm --filter @workspace/db run push"],
