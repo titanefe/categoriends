@@ -79,7 +79,7 @@ ${poolList}`;
       completion.choices[0]?.message?.content?.trim() ?? category;
     res.json({ subcategory });
   } catch (err) {
-    req.log.error({ err }, "Failed to generate sub-category");
+    req.log.error({ err }, `Failed to generate sub-category: ${err instanceof Error ? err.message : String(err)}`);
     // Fallback to a random pool pick if AI fails
     if (poolOptions.length > 0) {
       res.json({ subcategory: poolOptions[Math.floor(Math.random() * poolOptions.length)] });
@@ -166,7 +166,7 @@ Player's answer: "${answer}"`;
       reason: parsed_result.reason ?? "",
     });
   } catch (err) {
-    req.log.error({ err }, "Failed to verify answer");
+    req.log.error({ err }, `Failed to verify answer: ${err instanceof Error ? err.message : String(err)}`);
     res.status(500).json({ error: "Failed to verify answer" });
   }
 });
