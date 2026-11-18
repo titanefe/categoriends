@@ -81,7 +81,7 @@ export default function CreateRoom() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-8 overflow-y-auto">
-      <div className="w-full max-w-sm py-4">
+      <div className="w-full max-w-sm py-3">
         <button
           data-testid="button-back"
           onClick={() => setLocation("/")}
@@ -94,7 +94,7 @@ export default function CreateRoom() {
         <p className="text-muted-foreground text-sm mb-6">{t("setup.createSubtitle")}</p>
 
         <div className="mb-5">
-          <label className="text-xs text-muted-foreground font-mono tracking-widest uppercase block mb-2">
+          <label className="text-xs text-muted-foreground tracking-[0.08em] uppercase block mb-2 font-semibold">
             {t("setup.yourName")}
           </label>
           <input
@@ -109,7 +109,7 @@ export default function CreateRoom() {
         </div>
 
         <div className="mb-5">
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">{t("setup.mode")}</p>
+          <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-2 font-semibold">{t("setup.mode")}</p>
           <div className="grid grid-cols-2 gap-2">
             {(["duel", "party"] as GameMode[]).map((m) => (
               <button
@@ -127,7 +127,7 @@ export default function CreateRoom() {
         </div>
 
         <div className="mb-5">
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
+          <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-2 font-semibold">
             {t("setup.timePerturn")}
           </p>
           <div className="flex gap-2 flex-wrap">
@@ -137,8 +137,8 @@ export default function CreateRoom() {
                 onClick={() => setTimeSeconds(sec)}
                 className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
                   timeSeconds === sec
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-border text-muted-foreground hover:border-accent/50"
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
               >
                 {sec}s
@@ -158,7 +158,7 @@ export default function CreateRoom() {
         </div>
 
         <div className="mb-5">
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">{t("setup.chooseCategory")}</p>
+          <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-2 font-semibold">{t("setup.chooseCategory")}</p>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {allCategories.map((cat) => (
               <button
@@ -168,7 +168,7 @@ export default function CreateRoom() {
                 className={`py-2.5 px-2 rounded-lg text-xs font-medium border transition-all ${
                   selected === cat && !custom
                     ? cat === randomLabel
-                      ? "border-accent bg-accent/15 text-accent"
+                      ? "border-primary bg-primary/15 text-primary"
                       : "border-primary bg-primary/15 text-primary"
                     : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
@@ -192,7 +192,7 @@ export default function CreateRoom() {
         <button
           data-testid="button-create"
           onClick={handleCreate}
-          className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all"
+          className="w-full py-3 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all"
         >
           {t("setup.create")}
         </button>

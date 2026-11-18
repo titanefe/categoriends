@@ -110,7 +110,7 @@ export default function SoloSetup() {
               className={`py-3 px-2 rounded-lg text-sm font-medium border transition-all active:scale-[0.97] ${
                 selected === cat && !custom
                   ? cat === randomLabel
-                    ? "border-accent bg-accent/15 text-accent"
+                    ? "border-primary bg-primary/15 text-primary"
                     : "border-primary bg-primary/15 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
               }`}
@@ -133,7 +133,7 @@ export default function SoloSetup() {
         </div>
 
         <div className="mb-6">
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-2">
+          <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-2 font-semibold">
             {t("setup.timePerturn")}
           </p>
           <div className="flex gap-2 flex-wrap">
@@ -143,8 +143,8 @@ export default function SoloSetup() {
                 onClick={() => setTimeSeconds(sec)}
                 className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
                   timeSeconds === sec
-                    ? "border-accent bg-accent/15 text-accent"
-                    : "border-border text-muted-foreground hover:border-accent/50"
+                    ? "border-primary bg-primary/15 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/50"
                 }`}
               >
                 {sec}s
@@ -171,7 +171,7 @@ export default function SoloSetup() {
           data-testid="button-start-solo"
           onClick={handleStart}
           disabled={generateMutation.isPending || (!selected && !custom.trim())}
-          className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full py-3 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {generateMutation.isPending ? (
             <span className="flex items-center justify-center gap-2">

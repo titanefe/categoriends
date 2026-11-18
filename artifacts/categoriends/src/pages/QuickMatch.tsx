@@ -127,13 +127,10 @@ export default function QuickMatch() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/10 blur-3xl" />
-          </div>
 
           <div className="relative z-10">
             {/* Animated indicator */}
-            <div className="flex items-center justify-center mb-8">
+            <div className="flex items-center justify-center mb-6">
               <div className="relative w-24 h-24">
                 <div className="absolute inset-0 rounded-full border-2 border-primary/20" />
                 <div className="absolute inset-0 rounded-full border-2 border-t-primary animate-spin" />
@@ -171,7 +168,7 @@ export default function QuickMatch() {
 
             <button
               onClick={handleCancel}
-              className="w-full py-4 rounded-xl font-semibold text-lg border border-border text-muted-foreground hover:border-destructive/50 hover:text-destructive active:scale-[0.98] transition-all"
+              className="w-full py-3 rounded-lg font-semibold text-base border border-border text-muted-foreground hover:border-destructive/50 hover:text-destructive active:scale-[0.98] transition-all"
             >
               {t("quickmatch.cancel")}
             </button>
@@ -186,13 +183,13 @@ export default function QuickMatch() {
       <div className="w-full max-w-sm">
         <button
           onClick={handleBack}
-          className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-8 flex items-center gap-1"
+          className="text-muted-foreground hover:text-foreground transition-colors text-sm mb-6 flex items-center gap-1"
         >
           &larr; {t("nav.back")}
         </button>
 
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/15 border border-primary/30 mb-3">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary/15 border border-primary/30 mb-3">
             <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
             </svg>
@@ -204,7 +201,7 @@ export default function QuickMatch() {
         <div className="flex flex-col gap-4">
           <button
             onClick={() => handleSelectMode("duel")}
-            className="w-full py-5 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary flex flex-col items-center gap-1"
+            className="w-full py-3.5 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all flex flex-col items-center gap-1"
           >
             <span className="text-xl">{t("quickmatch.mode1v1")}</span>
             <span className="text-sm font-normal opacity-80">{t("quickmatch.desc1v1")}</span>
@@ -212,7 +209,7 @@ export default function QuickMatch() {
 
           <button
             onClick={() => handleSelectMode("party4")}
-            className="w-full py-5 rounded-xl font-semibold text-lg border border-primary/40 text-primary hover:bg-primary/10 hover:border-primary active:scale-[0.98] transition-all flex flex-col items-center gap-1"
+            className="w-full py-3.5 rounded-lg font-semibold text-base border border-primary/40 text-primary hover:bg-primary/10 hover:border-primary active:scale-[0.98] transition-all flex flex-col items-center gap-1"
           >
             <span className="text-xl">{t("quickmatch.mode4p")}</span>
             <span className="text-sm font-normal opacity-80">{t("quickmatch.desc4p")}</span>

@@ -95,7 +95,7 @@ export default function JoinRoom() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder={t("join.codePlaceholder")}
             maxLength={6}
-            className="w-full px-4 py-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors text-center text-2xl font-mono tracking-widest"
+            className="w-full px-4 py-3 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors text-center text-2xl font-mono tracking-widest"
           />
           <input
             data-testid="input-player-name"
@@ -114,7 +114,7 @@ export default function JoinRoom() {
           data-testid="button-join"
           onClick={handleJoin}
           disabled={joining}
-          className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+          className="w-full py-3 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
         >
           {joining ? (
             <span className="flex items-center justify-center gap-2">

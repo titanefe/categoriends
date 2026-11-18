@@ -137,9 +137,6 @@ export default function DailyCategory() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center px-4 py-8 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-accent/8 blur-3xl" />
-      </div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col gap-6">
         {/* Back button */}
@@ -152,7 +149,7 @@ export default function DailyCategory() {
 
         {/* Header */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-accent/15 border border-accent/30 mb-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-accent/15 border border-accent/30 mb-3">
             <svg className="w-7 h-7 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
             </svg>
@@ -168,8 +165,8 @@ export default function DailyCategory() {
         ) : (
           <>
             {/* Today's category card */}
-            <div className="bg-card border border-accent/30 rounded-2xl p-5 text-center">
-              <p className="text-xs font-mono tracking-widest uppercase text-accent/70 mb-2">
+            <div className="bg-card border border-accent/30 rounded-lg p-5 text-center">
+              <p className="text-xs tracking-[0.08em] uppercase text-accent/70 mb-2 font-semibold">
                 {t("daily.title")}
               </p>
               <p className="text-2xl font-bold text-foreground mb-4">{categoryName}</p>
@@ -182,7 +179,7 @@ export default function DailyCategory() {
             </div>
 
             {/* Attempt info + play button */}
-            <div className="bg-card border border-border rounded-2xl p-5 flex flex-col gap-3">
+            <div className="bg-card border border-border rounded-lg p-5 flex flex-col gap-3">
               {user && (
                 <>
                   <div className="flex items-center justify-between">
@@ -216,8 +213,7 @@ export default function DailyCategory() {
               <button
                 onClick={user ? (canPlay ? handlePlay : undefined) : handlePlay}
                 disabled={user !== null && !canPlay}
-                className="w-full py-4 rounded-xl font-semibold text-lg bg-accent text-accent-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ color: "var(--accent-foreground, #000)" }}
+                className="w-full py-3 rounded-lg font-semibold text-base bg-accent text-accent-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {canPlay || !user ? t("daily.play") : t("daily.noAttemptsLeft")}
               </button>
@@ -233,12 +229,12 @@ export default function DailyCategory() {
             </div>
 
             {/* Leaderboard */}
-            <div className="bg-card border border-border rounded-2xl p-5">
-              <p className="text-xs font-mono tracking-widest uppercase text-muted-foreground mb-4">
+            <div className="bg-card border border-border rounded-lg p-5">
+              <p className="text-xs tracking-[0.08em] uppercase text-muted-foreground mb-4 font-semibold">
                 {t("daily.leaderboard")}
               </p>
               {leaderboard.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-3">
                   {t("daily.noScores")}
                 </p>
               ) : (

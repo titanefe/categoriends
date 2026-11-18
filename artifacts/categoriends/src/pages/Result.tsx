@@ -153,9 +153,6 @@ export default function Result() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/15 blur-3xl" />
-        </div>
 
         <div className="relative z-10">
           <h1 data-testid="title-result" className="text-3xl font-bold mb-2 text-foreground">
@@ -164,13 +161,12 @@ export default function Result() {
 
           {winner && (
             <div className="my-8">
-              <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-3">
+              <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-3 font-semibold">
                 {t("result.winner")}
               </p>
               <p
                 data-testid="text-winner"
-                className="text-4xl font-bold text-primary neon-text mb-2"
-                style={{ fontFamily: "'Space Mono', monospace" }}
+                className="text-4xl font-bold text-primary mb-2"
               >
                 {displayName(winner)}
               </p>
@@ -178,7 +174,7 @@ export default function Result() {
                 <>
                   <div className="flex items-center justify-center gap-2 mt-4">
                     <span className="text-muted-foreground text-sm">{t("result.score")}</span>
-                    <span data-testid="text-final-score" className="text-5xl font-bold font-mono text-accent neon-cyan">
+                    <span data-testid="text-final-score" className="text-5xl font-bold font-mono text-accent">
                       {score}
                     </span>
                   </div>
@@ -197,7 +193,7 @@ export default function Result() {
 
                   {/* Daily mode result */}
                   {isDailyMode && (
-                    <div className="mt-5 bg-card border border-accent/30 rounded-xl p-4 text-left flex flex-col gap-2">
+                    <div className="mt-5 bg-card border border-accent/30 rounded-lg p-4 text-left flex flex-col gap-2">
                       {user ? (
                         dailyResult ? (
                           <>
@@ -256,8 +252,8 @@ export default function Result() {
 
           {/* Multiplayer scores */}
           {!isSolo && sorted.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4 mb-8 text-left">
-              <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">
+            <div className="bg-card border border-border rounded-lg p-4 mb-6 text-left">
+              <p className="text-xs text-muted-foreground mb-3 tracking-[0.08em] uppercase font-semibold">
                 {t("result.finalScores")}
               </p>
               <div className="flex flex-col gap-2">
@@ -302,7 +298,7 @@ export default function Result() {
             <button
               data-testid="button-return-lobby"
               onClick={handleReturnToLobby}
-              className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all animate-glow-primary mb-3"
+              className="w-full py-3 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all mb-3"
             >
               {t("result.returnToLobby")}
             </button>
@@ -316,9 +312,9 @@ export default function Result() {
           <button
             data-testid="button-play-again"
             onClick={handleExit}
-            className={`w-full py-4 rounded-xl font-semibold text-lg transition-all active:scale-[0.98] ${
+            className={`w-full py-3 rounded-lg font-semibold text-lg transition-all active:scale-[0.98] ${
               isSolo
-                ? "bg-primary text-primary-foreground hover:opacity-90 animate-glow-primary"
+                ? "bg-primary text-primary-foreground hover:opacity-90"
                 : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
             }`}
           >

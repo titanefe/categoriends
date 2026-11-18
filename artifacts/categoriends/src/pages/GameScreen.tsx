@@ -388,13 +388,10 @@ export default function GameScreen() {
   if (gameOverOverlay) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-primary/20 blur-3xl animate-pulse" />
-        </div>
-        <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-4 relative z-10">
+        <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-4 relative z-10 font-semibold">
           {t("result.title")}
         </p>
-        <h1 className="text-5xl font-bold text-primary neon-text relative z-10" style={{ fontFamily: "'Space Mono', monospace" }}>
+        <h1 className="text-5xl font-bold text-primary relative z-10">
           {(() => {
             const { winnerId, winnerName } = gameOverOverlay;
             if (!winnerId) return winnerName;
@@ -410,10 +407,10 @@ export default function GameScreen() {
 
   const timerPercent = (timeLeft / timerMax) * 100;
   const timerColor = timeLeft > timerMax * 0.5
-    ? "hsl(145, 80%, 50%)"
+    ? "hsl(var(--primary))"
     : timeLeft > timerMax * 0.2
-    ? "hsl(45, 100%, 60%)"
-    : "hsl(0, 85%, 60%)";
+    ? "hsl(var(--accent))"
+    : "hsl(var(--destructive))";
   const isDangerous = timeLeft <= Math.ceil(timerMax * 0.2);
   const effectivePaused = timerPausedRef.current;
 
@@ -424,7 +421,7 @@ export default function GameScreen() {
     <div className="min-h-[100dvh] bg-background flex flex-col select-none">
       {/* Live toast — shows another player's answer result briefly */}
       {liveToast && (
-        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-xl text-sm font-mono border shadow-lg transition-all pointer-events-none ${
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-lg text-sm font-mono border shadow-lg transition-all pointer-events-none ${
           liveToast.valid
             ? "bg-emerald-950 border-emerald-500/60 text-emerald-300"
             : "bg-red-950 border-red-500/60 text-red-300"
@@ -443,11 +440,11 @@ export default function GameScreen() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm"
           onClick={dismissPopup}
         >
-          <div className="mx-4 w-full max-w-xs bg-card border border-primary/40 rounded-2xl p-8 text-center shadow-2xl">
-            <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-3">
+          <div className="mx-4 w-full max-w-xs bg-card border border-primary/40 rounded-lg p-6 text-center shadow-2xl">
+            <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-3 font-semibold">
               {t("game.subcategoryLabel")}
             </p>
-            <h2 className="text-3xl font-bold text-primary neon-text mb-6" style={{ fontFamily: "'Space Mono', monospace" }}>
+            <h2 className="text-3xl font-bold text-primary mb-6">
               {gameState.subcategory}
             </h2>
             <p className="text-xs text-muted-foreground font-mono">
@@ -460,7 +457,7 @@ export default function GameScreen() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
-          <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase">{t("game.subcategoryLabel")}</p>
+          <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase font-semibold">{t("game.subcategoryLabel")}</p>
           <h1
             data-testid="text-subcategory"
             className="text-xl font-bold text-foreground leading-tight mt-0.5"
@@ -484,7 +481,7 @@ export default function GameScreen() {
           <div
             data-testid="timer-bar"
             className={`h-full rounded-full timer-bar ${isDangerous && !effectivePaused ? "animate-pulse-danger" : ""}`}
-            style={{ width: `${timerPercent}%`, backgroundColor: verifying ? "hsl(45, 100%, 60%)" : timerColor }}
+            style={{ width: `${timerPercent}%`, backgroundColor: verifying ? "hsl(var(--muted-foreground))" : timerColor }}
           />
         </div>
         <div className="flex justify-between mt-1">
@@ -556,7 +553,7 @@ export default function GameScreen() {
       {/* Spectator banner for eliminated players */}
       {isEliminated && !isSolo ? (
         <div className="px-4 pb-4">
-          <div className="w-full py-4 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-center text-sm font-medium">
+          <div className="w-full py-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-center text-sm font-medium">
             {t("game.spectatorBanner")}
           </div>
         </div>
@@ -579,7 +576,7 @@ export default function GameScreen() {
             <span
               className={`text-sm font-bold font-mono px-2.5 py-0.5 rounded-full border transition-colors ${
                 verifying
-                  ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                  ? "border-accent/40 text-accent bg-accent/10"
                   : isDangerous
                   ? "border-destructive/40 text-destructive bg-destructive/10 animate-pulse"
                   : "border-border text-muted-foreground bg-card"
@@ -592,7 +589,7 @@ export default function GameScreen() {
           {/* Input area */}
           <div className="px-4 pt-1.5" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 1rem))" }}>
             <form onSubmit={handleSubmit} className="flex gap-2">
-              <div className={`flex-1 relative rounded-xl overflow-hidden transition-all ${
+              <div className={`flex-1 relative rounded-lg overflow-hidden transition-all ${
                 animState === "accepted" ? "animate-flash-green" : animState === "rejected" ? "animate-flash-red animate-shake" : ""
               }`}>
                 <input
@@ -603,7 +600,7 @@ export default function GameScreen() {
                   onChange={(e) => setAnswer(e.target.value)}
                   placeholder={isMyTurn ? t("game.answerPlaceholder") : `${t("game.waiting")} ${currentPlayer?.name ?? ""}...`}
                   disabled={!isMyTurn || verifying}
-                  className="w-full px-4 py-4 bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base rounded-xl"
+                  className="w-full px-4 py-3 bg-card border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base rounded-lg"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -614,7 +611,7 @@ export default function GameScreen() {
                 data-testid="button-submit-answer"
                 type="submit"
                 disabled={!isMyTurn || verifying || !answer.trim() || isEliminated}
-                className="px-5 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.96] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                className="px-5 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 active:scale-[0.96] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
               >
                 {verifying ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin block" />

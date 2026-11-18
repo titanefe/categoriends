@@ -232,11 +232,11 @@ export default function RoomLobby() {
 
         {/* Settings panel (host only, collapsible) */}
         {isHost && showSettings && (
-          <div className="bg-card border border-primary/30 rounded-xl p-4 mb-6 animate-slide-up">
-            <p className="text-xs text-muted-foreground font-mono tracking-widest uppercase mb-4">{t("lobby.settingsTitle")}</p>
+          <div className="bg-card border border-primary/30 rounded-lg p-4 mb-6 animate-slide-up">
+            <p className="text-xs text-muted-foreground tracking-[0.08em] uppercase mb-4 font-semibold">{t("lobby.settingsTitle")}</p>
 
             {/* Category */}
-            <p className="text-xs text-muted-foreground font-mono mb-2 uppercase tracking-widest">{t("lobby.settingsCategory")}</p>
+            <p className="text-xs text-muted-foreground mb-2 uppercase tracking-[0.08em] font-semibold">{t("lobby.settingsCategory")}</p>
             <div className="grid grid-cols-2 gap-1.5 mb-3">
               {categories.map((cat) => (
                 <button
@@ -261,7 +261,7 @@ export default function RoomLobby() {
             />
 
             {/* Time */}
-            <p className="text-xs text-muted-foreground font-mono mb-2 uppercase tracking-widest">{t("lobby.settingsTime")}</p>
+            <p className="text-xs text-muted-foreground mb-2 uppercase tracking-[0.08em] font-semibold">{t("lobby.settingsTime")}</p>
             <div className="flex gap-1.5 flex-wrap mb-4">
               {TIME_OPTIONS.map((sec) => (
                 <button
@@ -269,8 +269,8 @@ export default function RoomLobby() {
                   onClick={() => setSettingsTime(sec)}
                   className={`px-3 py-2 rounded-lg text-sm font-mono font-medium border transition-all ${
                     settingsTime === sec
-                      ? "border-accent bg-accent/15 text-accent"
-                      : "border-border text-muted-foreground hover:border-accent/50"
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/50"
                   }`}
                 >
                   {sec}s
@@ -299,16 +299,16 @@ export default function RoomLobby() {
         )}
 
         {/* Room code */}
-        <div className="bg-card border border-primary/30 rounded-xl p-5 mb-6 text-center">
-          <p className="text-xs text-muted-foreground font-mono mb-2 tracking-widest uppercase">{t("lobby.code")}</p>
-          <p data-testid="text-room-code" className="text-4xl font-mono font-bold text-primary neon-text tracking-widest">
+        <div className="bg-card border border-primary/30 rounded-lg p-5 mb-6 text-center">
+          <p className="text-xs text-muted-foreground mb-2 tracking-[0.08em] uppercase font-semibold">{t("lobby.code")}</p>
+          <p data-testid="text-room-code" className="text-4xl font-mono font-bold text-primary tracking-widest">
             {room.code}
           </p>
         </div>
 
         {/* Players */}
         <div className="mb-6">
-          <p className="text-xs text-muted-foreground font-mono mb-3 tracking-widest uppercase">{t("lobby.players")}</p>
+          <p className="text-xs text-muted-foreground mb-3 tracking-[0.08em] uppercase font-semibold">{t("lobby.players")}</p>
           <div className="flex flex-col gap-2">
             {room.players.map((p) => (
               <div
@@ -349,7 +349,7 @@ export default function RoomLobby() {
             data-testid="button-start-game"
             onClick={handleStart}
             disabled={generateMutation.isPending || room.players.length < 2}
-            className="w-full py-4 rounded-xl font-semibold text-lg bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+            className="w-full py-3 rounded-lg font-semibold text-base bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
           >
             {generateMutation.isPending ? (
               <span className="flex items-center justify-center gap-2">
@@ -359,7 +359,7 @@ export default function RoomLobby() {
             ) : t("lobby.start")}
           </button>
         ) : (
-          <p className="text-center text-muted-foreground text-sm font-mono py-4">
+          <p className="text-center text-muted-foreground text-sm font-mono py-3">
             {t("lobby.waitingToStart")}
           </p>
         )}

@@ -41,7 +41,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl"
+        className="w-full max-w-sm bg-card border border-border rounded-lg p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {user ? (
@@ -53,14 +53,14 @@ export default function AuthModal({ onClose }: AuthModalProps) {
             </div>
             <button
               onClick={handleLogout}
-              className="w-full py-3 rounded-xl font-semibold text-sm border border-destructive/50 text-destructive hover:bg-destructive/10 active:scale-[0.98] transition-all"
+              className="w-full py-3 rounded-lg font-semibold text-sm border border-destructive/50 text-destructive hover:bg-destructive/10 active:scale-[0.98] transition-all"
             >
               {t("auth.logout")}
             </button>
           </div>
         ) : (
           <>
-            <div className="flex gap-1 mb-6 p-1 bg-background rounded-xl border border-border">
+            <div className="flex gap-1 mb-6 p-1 bg-background rounded-lg border border-border">
               <button
                 onClick={() => { setTab("login"); setError(""); }}
                 className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "login" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
@@ -97,7 +97,7 @@ export default function AuthModal({ onClose }: AuthModalProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl font-semibold text-sm bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
+                className="w-full py-3 rounded-lg font-semibold text-sm bg-primary text-primary-foreground hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
